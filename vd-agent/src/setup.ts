@@ -39,7 +39,7 @@ import {
 const DATABASE_FILE = 'database.sqlite'
 
 // You will need to get a project ID from infura https://www.infura.io
-const INFURA_PROJECT_ID = '<your PROJECT_ID here>'
+const INFURA_PROJECT_ID = 'ab68bdc6be4042ae95da0025f1d9a8bc'
 
 // This will be the secret key for the KMS (replace this with your secret key)
 const KMS_SECRET_KEY =
