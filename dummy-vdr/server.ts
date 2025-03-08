@@ -31,7 +31,8 @@ async function initDB() {
         );
         CREATE TABLE IF NOT EXISTS schemas (
             id TEXT PRIMARY KEY,
-            schema TEXT NOT NULL
+            hash TEXT NOT NULL,
+            definition TEXT NOT NULL
         );
     `);
     console.log("✅ Dummy VDR initialisiert.");
@@ -42,14 +43,17 @@ app.post("/register-identifier", async (req, res) => {
     const { id, publicKey } = req.body;
     if (!id || !publicKey) {
         res.status(400).json({ error: "ID und publicKey erforderlich" });
+        return
     }
 
     try {
         const db = await openDB();
         await db.run("INSERT INTO identifiers (id, publicKey) VALUES (?, ?)", [id, publicKey]);
         res.json({ success: true, message: "Bezeichner registriert" });
+        return
     } catch (err) {
         res.status(500).json({ error: "Fehler beim Speichern des Bezeichners" });
+        return
     }
 });
 
@@ -62,24 +66,37 @@ app.get("/get-public-key/:id", async (req, res) => {
 
     if (result) {
         res.json({ success: true, publicKey: result.publicKey });
+        return
     } else {
         res.status(404).json({ error: "Bezeichner nicht gefunden" });
+        return
     }
 });
 
 // Schema registrieren
 app.post("/register-schema", async (req, res) => {
-    const { id, schema } = req.body;
-    if (!id || !schema) {
-        res.status(400).json({ error: "ID und Schema erforderlich" });
-    }
-
     try {
+        const { id, hash, definition } = req.body;
+        if (!id || !hash || !definition) {
+            res.status(400).json({ error: "ID, Hash und Schema erforderlich" });
+            return;
+        }
+
         const db = await openDB();
-        await db.run("INSERT INTO schemas (id, schema) VALUES (?, ?)", [id, JSON.stringify(schema)]);
+
+        const existingSchema = await db.get("SELECT id FROM schemas WHERE hash = ?", [hash]);
+
+        if (existingSchema) {
+            res.status(409).json({ error: "Schema mit dieser Definition existiert bereits"})
+            return;
+        }
+
+        await db.run("INSERT INTO schemas (id, hash, definition) VALUES (?, ?, ?)", [id, hash, JSON.stringify(definition)]);
         res.json({ success: true, message: "Schema registriert" });
+        return;
     } catch (err) {
         res.status(500).json({ error: "Fehler beim Speichern des Schemas" });
+        return;
     }
 });
 
@@ -87,12 +104,14 @@ app.post("/register-schema", async (req, res) => {
 app.get("/get-schema/:id", async (req, res) => {
     const { id } = req.params;
     const db = await openDB();
-    const result = await db.get("SELECT schema FROM schemas WHERE id = ?", [id]);
+    const result = await db.get("SELECT definition FROM schemas WHERE id = ?", [id]);
 
     if (result) {
         res.json({ success: true, schema: JSON.parse(result.schema) });
+        return
     } else {
         res.status(404).json({ error: "Schema nicht gefunden" });
+        return
     }
 });
 
