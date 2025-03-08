@@ -18,6 +18,12 @@ dist/
 logs/
 *.log
 
+# Key Files
+private.pem
+public.pem
+private.jwk.json
+public.jwk.json
+
 # Next.js build outputs
 .next/
 out/
