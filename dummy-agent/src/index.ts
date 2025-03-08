@@ -5,8 +5,11 @@ import { initDB, openDB } from "./database.js";
 import QRCode from "qrcode"
 import multer from "multer"
 import fs from "fs"
-import { initIssuer } from "./issuer.js";
+import { createSchema, initIssuer, validateSchema } from "./issuer.js";
 import dotenv from "dotenv"
+import { enrolmentCertificationSchema } from "./demo_data.js";
+import { v4 as uuidv4 } from "uuid";
+import { importJWK, SignJWT } from "jose";
 
 dotenv.config();
 
@@ -16,6 +19,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const DATABASE_PATH = process.env.DATABASE_PATH || "./database.sqlite"
 const FRONTEND_URL = "http://192.168.178.69:3000";
+const PRIVATE_KEY_PATH = "private.pem"
+const VDR_URL = process.env.VDR_URL || "http://localhost:3002"
 
 // Middleware
 app.use(cors({
@@ -30,6 +35,8 @@ app.use(express.json());
     await initDB();
 
     await initIssuer()
+
+    await createSchema(enrolmentCertificationSchema)
 
     app.get("/", (req, res) => {
         res.send("✅ SSI Dummy Server läuft!");
@@ -79,9 +86,60 @@ app.use(express.json());
 
     app.post("/issue-credential", async (req, res) => {
         try {
+            const { schemaId, holderId, data } = req.body;
+    
+            if (!schemaId || !holderId || !data) {
+                res.status(400).json({ error: "Schema ID, Holder ID und Credential-Daten erforderlich" });
+                return;
+            }
+    
+            // Prüfen, ob das Schema existiert
+            const schemaResponse = await fetch(`${VDR_URL}/get-schema/${schemaId}`);
+            const schemaData = await schemaResponse.json();
+            if (!schemaData.success) {
+                res.status(404).json({ error: "Schema nicht gefunden" });
+                return;
+            }
 
-        } catch {
-
+            if (!validateSchema(data, schemaData.schema)) {
+                res.status(400).json({ error: "Daten entsprechen nicht dem Schema"})
+                return;
+            }
+    
+            // Laden des privaten Schlüssels des Issuers
+            if (!fs.existsSync(PRIVATE_KEY_PATH)) {
+                res.status(500).json({ error: "Privater Schlüssel des Issuers fehlt" });
+                return;
+            }
+            const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
+    
+            // Credential-Objekt erstellen
+            const credentialData = {
+                id: uuidv4(),
+                schema: schemaId,
+                issuer: process.env.ISSUER_UUID,
+                holder: holderId,
+                issuedAt: new Date().toISOString(),
+                data
+            };
+    
+            // Credential signieren
+            const proof = await new SignJWT(credentialData)
+                .setProtectedHeader({ alg: "RS256" })
+                .sign(await importJWK(privateKeyJWK, "RS256"));
+            
+            const credential = {
+                credentialData,
+                proof: proof
+            }
+    
+            res.json({ success: true, credential: credential });
+            return;
+    
+        } catch (err) {
+            console.error("Fehler bei der Credential-Erstellung:", err);
+            res.status(500).json({ error: "Fehler bei der Credential-Ausstellung" });
+            return;
         }
     })
     
