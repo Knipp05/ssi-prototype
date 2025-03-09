@@ -2,14 +2,14 @@ import express from "express";
 import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
+import { PORT, VDR_URL } from "./constants";
 
 const app = express();
-const PORT = process.env.PORT || 3002;
 
 app.use(cors({
     origin: "*",
     methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"]
+    allowedHeaders: ["Content-Type", "ngrok-skip-browser-warning"]
 }));
 app.use(express.json());
 
@@ -138,7 +138,37 @@ app.get("/schema/:id", async (req, res) => {
             res.status(500).json({ error: "Schema-Definition ist ungültig" });
             return;
         }
+        console.log("Schemadaten: ",schemaData)
+        res.status(200).json({ schema: schemaData });
+    } catch (err) {
+        console.error("Fehler bei der Schema-Abfrage:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
 
+app.get("/get-schema-by-hash/:hash", async (req, res) => {
+    try {
+        const { hash } = req.params;
+        const db = await openDB();
+        const result = await db.get("SELECT id FROM schemas WHERE hash = ?", [hash]);
+
+        console.log("Schema-Abfrage Ergebnis:", result);
+
+        if (!result || !result.definition) {
+            res.status(404).json({ error: "Schema nicht gefunden" });
+            return;
+        }
+
+        // Sicherstellen, dass die Definition wirklich ein JSON-String ist
+        let schemaData;
+        try {
+            schemaData = JSON.parse(result.definition);
+        } catch (jsonError) {
+            console.error("Fehler beim Parsen der Schema-Definition:", jsonError);
+            res.status(500).json({ error: "Schema-Definition ist ungültig" });
+            return;
+        }
+        console.log("Schemadaten: ",schemaData)
         res.status(200).json({ schema: schemaData });
     } catch (err) {
         console.error("Fehler bei der Schema-Abfrage:", err);
@@ -151,6 +181,6 @@ app.get("/schema/:id", async (req, res) => {
 (async () => {
     await initDB();
     app.listen(PORT, () => {
-        console.log(`Dummy VDR läuft auf http://localhost:${PORT}`);
+        console.log(`Dummy VDR läuft auf ${VDR_URL}`);
     });
 })();
