@@ -16,11 +16,11 @@ const PRIVATE_KEY_PATH = "private.pem";
 const PUBLIC_KEY_PATH = "public.pem";
 const VDR_URL = process.env.VDR_URL || "http://localhost:3002";
 
-async function checkIfIssuerRegistered(): Promise<boolean> {
+async function checkIfIssuerRegistered() {
     try {
-        const response = await fetch(`${VDR_URL}/get-public-key/${ISSUER_UUID}`);
+        const response = await fetch(`${VDR_URL}/issuer/${ISSUER_UUID}`);
         const data = await response.json();
-        return data.success || false;
+        return data.error ? false : true;
     } catch (err) {
         console.error("Fehler beim Abrufen des Issuer-Status:", err);
         return false;
@@ -47,60 +47,65 @@ async function registerIssuer(publicKeyJWK: object) {
 }
 
 async function loadOrGenerateKeys() {
-    if (fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(PUBLIC_KEY_PATH)) {
-        console.log("Schlüssel existieren bereits, kein neues Paar wird erstellt.");
-        return;
+    let publicJWK;
+
+    // **1️⃣ Issuer immer registrieren, egal ob Schlüssel existieren oder nicht**
+    if (fs.existsSync(PUBLIC_KEY_PATH)) {
+        console.log("🔹 Lade vorhandenen Public Key für Registrierung...");
+        publicJWK = JSON.parse(fs.readFileSync(PUBLIC_KEY_PATH, "utf8"));
+    } else {
+        console.log("🔹 Es existiert noch kein Public Key. Generiere neuen Schlüssel...");
+        const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+
+        // **Speichere den privaten Schlüssel**
+        const privateJWK = await exportJWK(privateKey);
+        fs.writeFileSync(PRIVATE_KEY_PATH, JSON.stringify(privateJWK, null, 2));
+
+        // **Speichere den öffentlichen Schlüssel**
+        publicJWK = await exportJWK(publicKey);
+        fs.writeFileSync(PUBLIC_KEY_PATH, JSON.stringify(publicJWK, null, 2));
+
+        console.log("Neues Schlüsselpaar gespeichert.");
     }
 
-    console.log("Erzeuge neues Schlüsselpaar...");
-    const { privateKey, publicKey } = await generateKeyPair("RS256", {extractable: true});
-
-    // Speichere den privaten Schlüssel als PEM
-    const privateJWK = await exportJWK(privateKey);
-    fs.writeFileSync(PRIVATE_KEY_PATH, JSON.stringify(privateJWK, null, 2));
-
-    // Speichere den öffentlichen Schlüssel als PEM
-    const publicJWK = await exportJWK(publicKey);
-    fs.writeFileSync(PUBLIC_KEY_PATH, JSON.stringify(publicJWK, null, 2));
-
-    console.log("Neues Schlüsselpaar gespeichert.");
-
-    // Issuer beim VDR registrieren
+    // **2️⃣ Issuer beim VDR registrieren**
     await registerIssuer(publicJWK);
+    console.log("Issuer wurde erfolgreich registriert.");
 }
 
-export function validateSchema(data: object, schema: any): boolean {
-    const { properties, required } = schema;
 
-    // Prüfen, ob alle Pflichtfelder vorhanden sind
-    for (const field of required) {
-        if (!(field in data)) {
-            console.error(`Fehlendes Feld: ${field}`);
-            return false;
-        }
-    }
+export function validateSchema(data: object, schema: any): boolean {
+    console.log("Eingehende Daten:", data);
+    console.log("Erwartetes Schema:", schema);
 
     // Prüfen, ob die Feldnamen und Typen korrekt sind
-    for (const key of Object.keys(data)) {
-        if (!(key in properties)) {
-            console.error(`Unerwartetes Feld: ${key}`);
+    for (const key of Object.keys(schema)) {
+        console.log(`Prüfe, ob ${key} in den Daten vorhanden ist`);
+
+        if (!(key in data)) {
+            console.error(`Fehlendes Feld: ${key}`);
             return false;
         }
 
-        const expectedType = properties[key].type;
-        const actualType = (data as Record<string, any>)[key];
+        const expectedType = schema[key].type;
+        const actualValue = (data as Record<string, any>)[key];
+        const actualType = typeof actualValue;
 
-        if (expectedType === "integer" && !Number.isInteger((data as Record<string, any>)[key])) {
-            console.error(`Feld ${key} sollte ein Integer sein, aber ist: ${actualType}`);
-            return false;
-        }
-
-        if (expectedType !== "integer" && actualType !== expectedType) {
-            console.error(`Feld ${key} sollte vom Typ ${expectedType} sein, aber ist: ${actualType}`);
-            return false;
+        // 🔹 Sonderfall: "integer" vs. "number"
+        if (expectedType === "integer") {
+            if (!Number.isInteger(actualValue)) {
+                console.error(`Feld ${key} sollte ein Integer sein, aber ist: ${actualValue} (Typ: ${actualType})`);
+                return false;
+            }
+        } else {
+            if (actualType !== expectedType) {
+                console.error(`Feld ${key} sollte vom Typ ${expectedType} sein, aber ist: ${actualType}`);
+                return false;
+            }
         }
     }
 
+    console.log("Schema-Validierung erfolgreich!");
     return true;
 }
 
@@ -129,7 +134,7 @@ export async function createSchema(schemaDefinition: object) {
     const isRegistered = await checkIfSchemaExists(schemaHash);
     if (isRegistered) {
         console.log("Schema ist bereits im VDR registriert.");
-        return;
+        return null;
     }
 
     const schema = {
@@ -140,6 +145,7 @@ export async function createSchema(schemaDefinition: object) {
 
     // Falls nicht registriert → Schema speichern
     await registerSchema(schema);
+    return schemaId
 }
 
 function generateSchemaHash(schema: object): string {
@@ -149,7 +155,7 @@ function generateSchemaHash(schema: object): string {
 // **2️⃣ Prüft, ob das Schema bereits existiert**
 async function checkIfSchemaExists(schemaId: string): Promise<boolean> {
     try {
-        const response = await fetch(`${VDR_URL}/get-schema/${schemaId}`);
+        const response = await fetch(`${VDR_URL}/schema/${schemaId}`);
         const data = await response.json();
         return data.success || false;
     } catch (err) {

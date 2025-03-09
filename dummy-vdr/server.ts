@@ -41,15 +41,21 @@ async function initDB() {
 // Öffentlichen Schlüssel für eine ID speichern
 app.post("/register-identifier", async (req, res) => {
     const { id, publicKey } = req.body;
-    if (!id || !publicKey) {
+
+    const publicJWK = {
+        kty: publicKey.kty,
+        n: publicKey.n,
+        e: publicKey.e
+    }
+    if (!id || !publicJWK.kty || !publicJWK.e || !publicJWK.n) {
         res.status(400).json({ error: "ID und publicKey erforderlich" });
         return
     }
 
     try {
         const db = await openDB();
-        await db.run("INSERT INTO identifiers (id, publicKey) VALUES (?, ?)", [id, publicKey]);
-        res.json({ success: true, message: "Bezeichner registriert" });
+        await db.run("INSERT INTO identifiers (id, publicKey) VALUES (?, ?)", [id, JSON.stringify(publicJWK)]);
+        res.status(201).json({ message: "Bezeichner registriert" });
         return
     } catch (err) {
         res.status(500).json({ error: "Fehler beim Speichern des Bezeichners" });
@@ -59,13 +65,22 @@ app.post("/register-identifier", async (req, res) => {
 
 
 // Öffentlichen Schlüssel für eine ID abrufen
-app.get("/get-public-key/:id", async (req, res) => {
+app.get("/issuer/:id", async (req, res) => {
     const { id } = req.params;
+    console.log("Anfrage zu Issuer: ", id)
     const db = await openDB();
     const result = await db.get("SELECT publicKey FROM identifiers WHERE id = ?", [id]);
+    console.log(result)
 
     if (result) {
-        res.json({ success: true, publicKey: result.publicKey });
+        let publicKey;
+        try {
+            publicKey= JSON.parse(result.publicKey);
+        } catch (err) {
+            console.error("Fehler beim Parsen des Public Keys: ", err)
+            res.status(500).json( { error: "Fehler beim Verarbeiten des Public Keys" })
+        }
+        res.status(200).json({ publicKey: publicKey });
         return
     } else {
         res.status(404).json({ error: "Bezeichner nicht gefunden" });
@@ -101,24 +116,41 @@ app.post("/register-schema", async (req, res) => {
 });
 
 // Schema abrufen
-app.get("/get-schema/:id", async (req, res) => {
-    const { id } = req.params;
-    const db = await openDB();
-    const result = await db.get("SELECT definition FROM schemas WHERE id = ?", [id]);
+app.get("/schema/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = await openDB();
+        const result = await db.get("SELECT definition FROM schemas WHERE id = ?", [id]);
 
-    if (result) {
-        res.json({ success: true, schema: JSON.parse(result.schema) });
-        return
-    } else {
-        res.status(404).json({ error: "Schema nicht gefunden" });
-        return
+        console.log("Schema-Abfrage Ergebnis:", result);
+
+        if (!result || !result.definition) {
+            res.status(404).json({ error: "Schema nicht gefunden" });
+            return;
+        }
+
+        // Sicherstellen, dass die Definition wirklich ein JSON-String ist
+        let schemaData;
+        try {
+            schemaData = JSON.parse(result.definition);
+        } catch (jsonError) {
+            console.error("Fehler beim Parsen der Schema-Definition:", jsonError);
+            res.status(500).json({ error: "Schema-Definition ist ungültig" });
+            return;
+        }
+
+        res.status(200).json({ schema: schemaData });
+    } catch (err) {
+        console.error("Fehler bei der Schema-Abfrage:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
     }
 });
+
 
 // Server starten
 (async () => {
     await initDB();
     app.listen(PORT, () => {
-        console.log(`✅ Dummy VDR läuft auf http://localhost:${PORT}`);
+        console.log(`Dummy VDR läuft auf http://localhost:${PORT}`);
     });
 })();

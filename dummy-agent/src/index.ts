@@ -7,9 +7,10 @@ import multer from "multer"
 import fs from "fs"
 import { createSchema, initIssuer, validateSchema } from "./issuer.js";
 import dotenv from "dotenv"
-import { enrolmentCertificationSchema } from "./demo_data.js";
+import { enrolmentCertificationSchema, testCertificationSchema } from "./demo_data.js";
 import { v4 as uuidv4 } from "uuid";
 import { importJWK, SignJWT } from "jose";
+import { title } from "process";
 
 dotenv.config();
 
@@ -17,10 +18,10 @@ const upload = multer({ dest: "uploads/" });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DATABASE_PATH = process.env.DATABASE_PATH || "./database.sqlite"
 const FRONTEND_URL = "http://192.168.178.69:3000";
 const PRIVATE_KEY_PATH = "private.pem"
 const VDR_URL = process.env.VDR_URL || "http://localhost:3002"
+let TEMP_SCHEMA_ID = process.env.TEMP_SCHEMA_ID || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
 
 // Middleware
 app.use(cors({
@@ -36,7 +37,7 @@ app.use(express.json());
 
     await initIssuer()
 
-    await createSchema(enrolmentCertificationSchema)
+    TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
 
     app.get("/", (req, res) => {
         res.send("✅ SSI Dummy Server läuft!");
@@ -52,11 +53,14 @@ app.use(express.json());
 
             if (user && await compare(password, user.password)) {
                 res.json({ success: true, message: "Login erfolgreich", user });
+                return;
             } else {
                 res.status(401).json({ error: "Ungültige Anmeldedaten" });
+                return;
             }
         } catch (err) {
             res.status(500).json({ error: "Fehler beim Login" });
+            return;
         }
     });
 
@@ -85,23 +89,45 @@ app.use(express.json());
     });
 
     app.post("/issue-credential", async (req, res) => {
+        const { holderId } = req.body;
+        console.log("Anfrage zur Ausstellung von: ", holderId)
+        //const { schemaId, holderId, data } = req.body;
+
         try {
-            const { schemaId, holderId, data } = req.body;
     
-            if (!schemaId || !holderId || !data) {
+            /* if (!schemaId || !holderId || !data) {
                 res.status(400).json({ error: "Schema ID, Holder ID und Credential-Daten erforderlich" });
                 return;
+            } */  
+            if (!holderId) {
+                res.status(400).json({ error: "Holder ID erforderlich" });
+                return;
+            }
+
+            const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`);
+            const userData = await userResponse.json();
+            if (userData.error) {
+                res.status(404).json({ error: "Benutzer-Identifier nicht gefunden" });
+                return;
+            }
+
+            const schemaId = TEMP_SCHEMA_ID //zunächst hardcoded
+            const demoCredentialSubject = {
+                id: holderId,
+                name: "Niklas",
+                age: 24,
+                registration_number: 82419
             }
     
             // Prüfen, ob das Schema existiert
-            const schemaResponse = await fetch(`${VDR_URL}/get-schema/${schemaId}`);
+            const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`);
             const schemaData = await schemaResponse.json();
-            if (!schemaData.success) {
+            if (schemaData.error) {
                 res.status(404).json({ error: "Schema nicht gefunden" });
                 return;
             }
 
-            if (!validateSchema(data, schemaData.schema)) {
+            if (!validateSchema(demoCredentialSubject, schemaData.schema)) {
                 res.status(400).json({ error: "Daten entsprechen nicht dem Schema"})
                 return;
             }
@@ -114,26 +140,28 @@ app.use(express.json());
             const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
     
             // Credential-Objekt erstellen
-            const credentialData = {
+            const credential = {
                 id: uuidv4(),
-                schema: schemaId,
-                issuer: process.env.ISSUER_UUID,
-                holder: holderId,
-                issuedAt: new Date().toISOString(),
-                data
+                type: [ "VerifiableCredential", "EnrolmentCredential"],
+                issuer: `${VDR_URL}/issuer/${process.env.ISSUER_UUID}`,
+                issuanceDate: new Date().toISOString(),
+                credentialSubject: demoCredentialSubject,
+                credentialSchema: {
+                    id: `${VDR_URL}/schema/${schemaId}`,
+                }
             };
     
             // Credential signieren
-            const proof = await new SignJWT(credentialData)
+            const proof = await new SignJWT(credential)
                 .setProtectedHeader({ alg: "RS256" })
                 .sign(await importJWK(privateKeyJWK, "RS256"));
             
-            const credential = {
-                credentialData,
+            const signedCredential = {
+                credential,
                 proof: proof
             }
     
-            res.json({ success: true, credential: credential });
+            res.status(200).json({ credential: signedCredential });
             return;
     
         } catch (err) {
@@ -141,7 +169,8 @@ app.use(express.json());
             res.status(500).json({ error: "Fehler bei der Credential-Ausstellung" });
             return;
         }
-    })
+    });
+   
     
 
     app.get("/generate-qr", async (req, res) => {
@@ -154,8 +183,11 @@ app.use(express.json());
         }
     });
 
+
+
     app.listen(PORT,  () => {
         console.log(`✅ Server läuft auf http://localhost:${PORT}`);
     });
     
 })();
+

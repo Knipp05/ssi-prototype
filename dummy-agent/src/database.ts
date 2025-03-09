@@ -27,7 +27,8 @@ export async function initDB(): Promise<void> {
     `);
 
     const users = [
-        { username: "nknipper", password: "pass123"}
+        { username: "nknipper", password: "pass123"},
+        { username: "tuser", password: "test123"}
     ];
 
     for (const user of users) {
@@ -39,5 +40,5 @@ export async function initDB(): Promise<void> {
         }
     }
 
-    console.log("✅ SQLite-Datenbank initialisiert.");
+    console.log("SQLite-Datenbank initialisiert.");
 }

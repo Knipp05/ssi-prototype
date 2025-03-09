@@ -15,3 +15,11 @@ export const enrolmentCertificationSchema= {
     required: []
     
 }
+
+export const testCertificationSchema = {
+    id: { "type": "string" },
+    name: { "type": "string" },
+    age: { "type": "integer" },
+    registration_number: { "type": "integer" }
+};
+
