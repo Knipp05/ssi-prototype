@@ -1,11 +1,15 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { BACKEND_URL, VDR_URL } from "../constants";
 
-const DUMMY_VDR_URL = "http://localhost:3002";
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
 
 export default function DummyWallet() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("sessionId");
   const [identifier, setIdentifier] = useState<string>("");
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -16,10 +20,16 @@ export default function DummyWallet() {
   useEffect(() => {
     async function checkOrCreateIdentifier() {
       const storedId = localStorage.getItem(STORAGE_KEY);
+      const identifierData = await createUserIdentifier();
+
+      if (!identifierData) {
+        alert("WebCrypto API funktioniert nur unter localhost oder https!");
+        return;
+      }
 
       if (!storedId) {
         console.log("🔹 Kein Identifier gefunden, erzeuge neuen...");
-        const { userId, publicJWK } = await createUserIdentifier();
+        const { userId, publicJWK } = identifierData;
 
         localStorage.setItem(
           STORAGE_KEY,
@@ -50,7 +60,13 @@ export default function DummyWallet() {
   }, []);
 
   async function createUserIdentifier() {
-    const userId = crypto.randomUUID();
+    if (!window.crypto?.subtle) {
+      alert(
+        "WebCrypto API wird derzeit nicht unterstützt. Bitte rufe die Seite über localhost oder https auf!"
+      );
+      return;
+    }
+    const userId = uuidv4();
     const keyPair = await window.crypto.subtle.generateKey(
       {
         name: "RSASSA-PKCS1-v1_5",
@@ -76,9 +92,36 @@ export default function DummyWallet() {
     return { userId, publicJWK: publicKey };
   }
 
+  async function sendCredential(credential) {
+    if (!sessionId) {
+      alert("❌ Keine gültige Session-ID gefunden.");
+      return;
+    }
+
+    const response = await fetch(`${BACKEND_URL}/verify-credential`, {
+      method: "POST",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sessionId, credential }),
+    });
+
+    const result = await response.json();
+    if (!result.success) {
+      alert("❌ Fehler bei der Übertragung.");
+    }
+  }
+
   async function registerUserWithVDR(userId: string, publicKey: object) {
     try {
-      const checkResponse = await fetch(`${DUMMY_VDR_URL}/issuer/${userId}`);
+      const checkResponse = await fetch(`${VDR_URL}/issuer/${userId}`, {
+        method: "GET",
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+          "Content-Type": "application/json",
+        },
+      });
 
       if (checkResponse.ok) {
         console.log(`✅ Benutzer ${userId} ist bereits im VDR registriert.`);
@@ -89,14 +132,14 @@ export default function DummyWallet() {
         `🔍 Benutzer ${userId} ist nicht registriert. Registrierung...`
       );
 
-      const registerResponse = await fetch(
-        `${DUMMY_VDR_URL}/register-identifier`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: userId, publicKey }),
-        }
-      );
+      const registerResponse = await fetch(`${VDR_URL}/register-identifier`, {
+        method: "POST",
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: userId, publicKey }),
+      });
 
       const registerData = await registerResponse.json();
 
@@ -125,16 +168,18 @@ export default function DummyWallet() {
 
     const { id: userId } = JSON.parse(storedData);
 
-    const response = await fetch("http://localhost:3001/issue-credential", {
+    const response = await fetch(`${BACKEND_URL}/issue-credential`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ holderId: userId }),
     });
 
     const result = await response.json();
     if (!result.error) {
       console.log("✅ Credential erhalten:", result.credential);
-      alert("✅ Credential erfolgreich ausgestellt!");
 
       // **Speichere Credential in localStorage**
       const storedCredentials = JSON.parse(
@@ -180,7 +225,14 @@ export default function DummyWallet() {
         {identifier === "" && (
           <button
             onClick={async () => {
-              const { userId, publicJWK } = await createUserIdentifier();
+              const identifierData = await createUserIdentifier();
+              if (!identifierData) {
+                alert(
+                  "WebCrypto API funktioniert nur unter localhost oder https!"
+                );
+                return;
+              }
+              const { userId, publicJWK } = identifierData;
 
               localStorage.setItem(
                 STORAGE_KEY,
