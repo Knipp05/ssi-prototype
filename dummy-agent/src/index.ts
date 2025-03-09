@@ -6,28 +6,22 @@ import QRCode from "qrcode"
 import multer from "multer"
 import fs from "fs"
 import { createSchema, initIssuer, validateSchema } from "./issuer.js";
-import dotenv from "dotenv"
 import { enrolmentCertificationSchema, testCertificationSchema } from "./demo_data.js";
 import { v4 as uuidv4 } from "uuid";
 import { importJWK, SignJWT } from "jose";
-import { title } from "process";
-
-dotenv.config();
+import { BACKEND_URL, FRONTEND_URL, ISSUER_UUID, PORT, PRIVATE_KEY_PATH, VDR_URL } from "./constants.js";
 
 const upload = multer({ dest: "uploads/" });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = "http://192.168.178.69:3000";
-const PRIVATE_KEY_PATH = "private.pem"
-const VDR_URL = process.env.VDR_URL || "http://localhost:3002"
-let TEMP_SCHEMA_ID = process.env.TEMP_SCHEMA_ID || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
+
+const sessions = new Set<string>();
 
 // Middleware
 app.use(cors({
     origin: "*",
     methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"]
+    allowedHeaders: ["Content-Type", "ngrok-skip-browser-warning"]
 }));
 app.use(express.json());
 
@@ -37,7 +31,7 @@ app.use(express.json());
 
     await initIssuer()
 
-    TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
+    const TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
 
     app.get("/", (req, res) => {
         res.send("✅ SSI Dummy Server läuft!");
@@ -62,6 +56,12 @@ app.use(express.json());
             res.status(500).json({ error: "Fehler beim Login" });
             return;
         }
+    });
+
+    app.get("/create-session", (req, res) => {
+        const sessionId = uuidv4();
+        sessions.add(sessionId);
+        res.status(201).json({ sessionId });
     });
 
     app.post("/upload-credential", upload.single("credential"), async (req, res, next) => {
@@ -104,7 +104,13 @@ app.use(express.json());
                 return;
             }
 
-            const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`);
+            const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`, {
+                method: "GET",
+                headers: {
+                  "ngrok-skip-browser-warning": "true",
+                  "Content-Type": "application/json",
+                },
+              });
             const userData = await userResponse.json();
             if (userData.error) {
                 res.status(404).json({ error: "Benutzer-Identifier nicht gefunden" });
@@ -112,6 +118,7 @@ app.use(express.json());
             }
 
             const schemaId = TEMP_SCHEMA_ID //zunächst hardcoded
+            console.log("Schema ID: ", schemaId)
             const demoCredentialSubject = {
                 id: holderId,
                 name: "Niklas",
@@ -120,7 +127,13 @@ app.use(express.json());
             }
     
             // Prüfen, ob das Schema existiert
-            const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`);
+            const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`, {
+                method: "GET",
+                headers: {
+                  "ngrok-skip-browser-warning": "true",
+                  "Content-Type": "application/json",
+                },
+              });
             const schemaData = await schemaResponse.json();
             if (schemaData.error) {
                 res.status(404).json({ error: "Schema nicht gefunden" });
@@ -143,7 +156,7 @@ app.use(express.json());
             const credential = {
                 id: uuidv4(),
                 type: [ "VerifiableCredential", "EnrolmentCredential"],
-                issuer: `${VDR_URL}/issuer/${process.env.ISSUER_UUID}`,
+                issuer: `${VDR_URL}/issuer/${ISSUER_UUID}`,
                 issuanceDate: new Date().toISOString(),
                 credentialSubject: demoCredentialSubject,
                 credentialSchema: {
@@ -186,7 +199,7 @@ app.use(express.json());
 
 
     app.listen(PORT,  () => {
-        console.log(`✅ Server läuft auf http://localhost:${PORT}`);
+        console.log(`✅ Server läuft auf ${BACKEND_URL}`);
     });
     
 })();

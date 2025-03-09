@@ -1,24 +1,23 @@
 import { v4 as uuidv4 } from "uuid";
-import dotenv from "dotenv";
 import { generateKeyPair, exportJWK } from "jose";
 import * as crypto from "node:crypto";
 import fs from "fs";
-
-dotenv.config();
+import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH } from "./constants.js";
 
 // Web Crypto API für jose setzen
 if (!globalThis.crypto) {
     globalThis.crypto = crypto.webcrypto as Crypto;
 }
 
-const ISSUER_UUID = process.env.ISSUER_UUID || uuidv4();
-const PRIVATE_KEY_PATH = "private.pem";
-const PUBLIC_KEY_PATH = "public.pem";
-const VDR_URL = process.env.VDR_URL || "http://localhost:3002";
-
-async function checkIfIssuerRegistered() {
+async function checkIfIssuerRegistered(): Promise<boolean> {
     try {
-        const response = await fetch(`${VDR_URL}/issuer/${ISSUER_UUID}`);
+        const response = await fetch(`${VDR_URL}/issuer/${ISSUER_UUID}`, {
+            method: "GET",
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+              "Content-Type": "application/json",
+            },
+          });
         const data = await response.json();
         return data.error ? false : true;
     } catch (err) {
@@ -27,11 +26,13 @@ async function checkIfIssuerRegistered() {
     }
 }
 
-async function registerIssuer(publicKeyJWK: object) {
+async function registerIssuer(publicKeyJWK: object): Promise<void> {
     try {
         const response = await fetch(`${VDR_URL}/register-identifier`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "ngrok-skip-browser-warning": "true", 
+                "Content-Type": "application/json" },
             body: JSON.stringify({ id: ISSUER_UUID, publicKey: publicKeyJWK }),
         });
 
@@ -46,7 +47,7 @@ async function registerIssuer(publicKeyJWK: object) {
     }
 }
 
-async function loadOrGenerateKeys() {
+async function loadOrGenerateKeys(): Promise<void> {
     let publicJWK;
 
     // **1️⃣ Issuer immer registrieren, egal ob Schlüssel existieren oder nicht**
@@ -110,7 +111,7 @@ export function validateSchema(data: object, schema: any): boolean {
 }
 
 
-export async function initIssuer() {
+export async function initIssuer(): Promise<void> {
     console.log("Initialisiere Issuer...");
     console.log("Issuer UUID:", ISSUER_UUID);
 
@@ -124,17 +125,17 @@ export async function initIssuer() {
     }
 }
 
-export async function createSchema(schemaDefinition: object) {
+export async function createSchema(schemaDefinition: object): Promise<string> {
     const schemaId = uuidv4(); // Generiere eine neue UUID für das Schema
     const schemaHash = generateSchemaHash(schemaDefinition)
 
     console.log(`Erzeuge neues Schema mit ID: ${schemaId}`);
 
     // Prüfe, ob das Schema bereits existiert
-    const isRegistered = await checkIfSchemaExists(schemaHash);
-    if (isRegistered) {
+    const existingSchemaId = await checkIfSchemaExists(schemaHash);
+    if (existingSchemaId) {
         console.log("Schema ist bereits im VDR registriert.");
-        return null;
+        return existingSchemaId;
     }
 
     const schema = {
@@ -153,14 +154,21 @@ function generateSchemaHash(schema: object): string {
 }
 
 // **2️⃣ Prüft, ob das Schema bereits existiert**
-async function checkIfSchemaExists(schemaId: string): Promise<boolean> {
+async function checkIfSchemaExists(schemaHash: string): Promise<string | null> {
     try {
-        const response = await fetch(`${VDR_URL}/schema/${schemaId}`);
+        const response = await fetch(`${VDR_URL}/get-schema-by-hash/${schemaHash}`, {
+            method: "GET",
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+              "Content-Type": "application/json",
+            },
+          });
         const data = await response.json();
-        return data.success || false;
+        console.log("Daten: ", data.schema)
+        return data.error ? null : data.id
     } catch (err) {
         console.error("Fehler beim Abrufen des Schema-Status:", err);
-        return false;
+        return null;
     }
 }
 
@@ -169,7 +177,9 @@ async function registerSchema(schema: object) {
     try {
         const response = await fetch(`${VDR_URL}/register-schema`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "ngrok-skip-browser-warning": "true",
+                "Content-Type": "application/json" },
             body: JSON.stringify(schema),
         });
 
