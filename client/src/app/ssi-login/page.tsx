@@ -5,11 +5,10 @@ import { BACKEND_URL, FRONTEND_URL } from "../constants";
 
 export default function SSILoginPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const ws = useRef<WebSocket | null>(null);
+  const wss = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     async function createSession() {
-      console.log(BACKEND_URL);
       // 1️⃣ Backend fragt eine neue Session-ID an
       const response = await fetch(`${BACKEND_URL}/create-session`, {
         method: "GET",
@@ -22,31 +21,45 @@ export default function SSILoginPage() {
       setSessionId(data.sessionId);
 
       // 2️⃣ WebSocket-Verbindung herstellen
-      ws.current = new WebSocket("ws://192.168.178.69:3003");
-      ws.current.onopen = () => {
+      connectWebSocket(data.sessionId);
+    }
+
+    function connectWebSocket(sessionId: string) {
+      const wsUrl = BACKEND_URL.replace(/^http/, "ws");
+      wss.current = new WebSocket(wsUrl);
+
+      wss.current.onopen = () => {
         console.log("✅ WebSocket verbunden!");
-        ws.current?.send(
+        wss.current?.send(
           JSON.stringify({
             type: "register-session",
-            sessionId: data.sessionId,
+            sessionId,
           })
         );
       };
-      /* socket.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                if (message.type === "verification-result" && message.success) {
-                    console.log("✅ Verifikation erfolgreich!");
-                    setVerified(true);
-                }
-            }; */
+
+      wss.current.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        console.log("📩 Nachricht vom Server:", message);
+      };
+
+      wss.current.onclose = () => {
+        console.log("⚠️ WebSocket geschlossen. Versuche Reconnect...");
+        setTimeout(() => connectWebSocket(sessionId), 3000);
+      };
+
+      wss.current.onerror = (error) => {
+        console.error("❌ WebSocket-Fehler:", error);
+      };
     }
 
     createSession();
 
     return () => {
-      if (ws.current) {
-        console.log("❌ WebSocket geschlossen!");
-        ws.current.close();
+      if (wss.current) {
+        console.log("❌ WebSocket wird geschlossen!");
+        wss.current.close();
+        wss.current = null;
       }
     };
   }, []);

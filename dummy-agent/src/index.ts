@@ -1,9 +1,10 @@
 import express from "express";
+import http from "http";
+import { WebSocketServer } from "ws";
 import cors from "cors";
 import { compare } from "bcrypt-ts";
 import { initDB, openDB } from "./database.js";
 import QRCode from "qrcode"
-import multer from "multer"
 import fs from "fs"
 import { createSchema, initIssuer, validateSchema } from "./issuer.js";
 import { enrolmentCertificationSchema, testCertificationSchema } from "./demo_data.js";
@@ -11,9 +12,9 @@ import { v4 as uuidv4 } from "uuid";
 import { importJWK, SignJWT } from "jose";
 import { BACKEND_URL, FRONTEND_URL, ISSUER_UUID, PORT, PRIVATE_KEY_PATH, VDR_URL } from "./constants.js";
 
-const upload = multer({ dest: "uploads/" });
-
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server })
 
 const sessions = new Set<string>();
 
@@ -32,6 +33,32 @@ app.use(express.json());
     await initIssuer()
 
     const TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || ""
+
+    wss.on("connection", (ws) => {
+        console.log("🔗 WebSocket verbunden!");
+    
+        ws.on("message", (message) => {
+            const data = JSON.parse(message.toString());
+    
+            if (data.type === "register-session" && data.sessionId) {
+                console.log(`📡 Session registriert: ${data.sessionId}`);
+                sessions.add(data.sessionId);
+            }
+    
+            if (data.type === "verification-result" && data.sessionId) {
+                console.log(`✅ Verifikation erfolgreich für Session: ${data.sessionId}`);
+                // Nachricht an alle verbundenen Clients senden
+                wss.clients.forEach(client => {
+                    client.send(JSON.stringify({
+                        type: "verification-success",
+                        sessionId: data.sessionId
+                    }));
+                });
+            }
+        });
+    
+        ws.send(JSON.stringify({ message: "Verbindung erfolgreich!" }));
+    });
 
     app.get("/", (req, res) => {
         res.send("✅ SSI Dummy Server läuft!");
@@ -62,30 +89,6 @@ app.use(express.json());
         const sessionId = uuidv4();
         sessions.add(sessionId);
         res.status(201).json({ sessionId });
-    });
-
-    app.post("/upload-credential", upload.single("credential"), async (req, res, next) => {
-        try {
-            if (!req.file) {
-                res.status(400).json({ error: "Keine Datei hochgeladen" });
-            } else {
-                const credentialData = JSON.parse(req.file.buffer.toString("utf8"));
-    
-                console.log("Erhaltenes Credential:", credentialData);
-        
-                // Dummy-Prüfung (später ersetzen mit Signaturprüfung)
-                if (credentialData.issuer && credentialData.claim) {
-                    res.json({ success: true, message: "Valid Credential", data: credentialData });
-                } else {
-                    res.status(400).json({ error: "Ungültiges Credential-Format" });
-                }
-            }
-    
-            // Datei als JSON einlesen (aus Buffer statt aus Datei)
-            
-        } catch (err) {
-            next(err); // Fehler weiterleiten, damit Express ihn behandelt
-        }
     });
 
     app.post("/issue-credential", async (req, res) => {
@@ -198,7 +201,7 @@ app.use(express.json());
 
 
 
-    app.listen(PORT,  () => {
+    server.listen(PORT,  () => {
         console.log(`✅ Server läuft auf ${BACKEND_URL}`);
     });
     
