@@ -31,7 +31,7 @@ app.use(express.json());
 
     await initIssuer()
 
-    const TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || "5b398e08-b2c6-4d4b-a127-c4250f9779ea"
+    const TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || ""
 
     app.get("/", (req, res) => {
         res.send("✅ SSI Dummy Server läuft!");
@@ -151,7 +151,7 @@ app.use(express.json());
                 return;
             }
             const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
-    
+
             // Credential-Objekt erstellen
             const credential = {
                 id: uuidv4(),

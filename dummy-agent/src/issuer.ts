@@ -18,8 +18,7 @@ async function checkIfIssuerRegistered(): Promise<boolean> {
               "Content-Type": "application/json",
             },
           });
-        const data = await response.json();
-        return data.error ? false : true;
+          return response.ok
     } catch (err) {
         console.error("Fehler beim Abrufen des Issuer-Status:", err);
         return false;
@@ -36,11 +35,10 @@ async function registerIssuer(publicKeyJWK: object): Promise<void> {
             body: JSON.stringify({ id: ISSUER_UUID, publicKey: publicKeyJWK }),
         });
 
-        const data = await response.json();
-        if (data.success) {
+        if (response.ok) {
             console.log("Issuer erfolgreich registriert:", ISSUER_UUID);
         } else {
-            console.error("Fehler bei der Registrierung des Issuers:", data.error);
+            console.error("Fehler bei der Registrierung des Issuers");
         }
     } catch (err) {
         console.error("Fehler beim Senden an den VDR:", err);
@@ -52,10 +50,9 @@ async function loadOrGenerateKeys(): Promise<void> {
 
     // **1️⃣ Issuer immer registrieren, egal ob Schlüssel existieren oder nicht**
     if (fs.existsSync(PUBLIC_KEY_PATH)) {
-        console.log("🔹 Lade vorhandenen Public Key für Registrierung...");
         publicJWK = JSON.parse(fs.readFileSync(PUBLIC_KEY_PATH, "utf8"));
     } else {
-        console.log("🔹 Es existiert noch kein Public Key. Generiere neuen Schlüssel...");
+        console.log("Es existiert noch kein Public Key. Generiere neuen Schlüssel...");
         const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
 
         // **Speichere den privaten Schlüssel**
@@ -71,7 +68,6 @@ async function loadOrGenerateKeys(): Promise<void> {
 
     // **2️⃣ Issuer beim VDR registrieren**
     await registerIssuer(publicJWK);
-    console.log("Issuer wurde erfolgreich registriert.");
 }
 
 
@@ -126,17 +122,16 @@ export async function initIssuer(): Promise<void> {
 }
 
 export async function createSchema(schemaDefinition: object): Promise<string> {
-    const schemaId = uuidv4(); // Generiere eine neue UUID für das Schema
     const schemaHash = generateSchemaHash(schemaDefinition)
-
-    console.log(`Erzeuge neues Schema mit ID: ${schemaId}`);
 
     // Prüfe, ob das Schema bereits existiert
     const existingSchemaId = await checkIfSchemaExists(schemaHash);
     if (existingSchemaId) {
-        console.log("Schema ist bereits im VDR registriert.");
+        console.log("Schema ist bereits im VDR registriert. ID: ", existingSchemaId);
         return existingSchemaId;
     }
+    const schemaId = uuidv4();
+    console.log(`Erzeuge neues Schema mit ID: ${schemaId}`);
 
     const schema = {
         id: schemaId,
@@ -156,16 +151,20 @@ function generateSchemaHash(schema: object): string {
 // **2️⃣ Prüft, ob das Schema bereits existiert**
 async function checkIfSchemaExists(schemaHash: string): Promise<string | null> {
     try {
-        const response = await fetch(`${VDR_URL}/get-schema-by-hash/${schemaHash}`, {
-            method: "GET",
+        const response = await fetch(`${VDR_URL}/schema/id-by-hash`, {
+            method: "POST",
             headers: {
               "ngrok-skip-browser-warning": "true",
               "Content-Type": "application/json",
             },
-          });
-        const data = await response.json();
-        console.log("Daten: ", data.schema)
-        return data.error ? null : data.id
+            body: JSON.stringify({ hash: schemaHash })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.id
+        }
+        return null
     } catch (err) {
         console.error("Fehler beim Abrufen des Schema-Status:", err);
         return null;
@@ -179,15 +178,19 @@ async function registerSchema(schema: object) {
             method: "POST",
             headers: { 
                 "ngrok-skip-browser-warning": "true",
-                "Content-Type": "application/json" },
+                "Content-Type": "application/json" 
+            },
             body: JSON.stringify(schema),
         });
 
+        // 🔹 JSON-Antwort nur EINMAL auslesen
         const data = await response.json();
-        if (data.success) {
+        console.log("Antwort: ", data);
+
+        if (response.ok) {
             console.log("Schema erfolgreich registriert");
         } else {
-            console.error("Fehler bei der Schema-Registrierung:", data.error);
+            console.error("Fehler bei der Schema-Registrierung:", data.message);
         }
     } catch (err) {
         console.error("Fehler beim Senden des Schemas an den VDR:", err);

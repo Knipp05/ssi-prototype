@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
-import { PORT, VDR_URL } from "./constants";
+import { PORT, VDR_URL } from "./constants.js";
 
 const app = express();
 
@@ -48,17 +48,17 @@ app.post("/register-identifier", async (req, res) => {
         e: publicKey.e
     }
     if (!id || !publicJWK.kty || !publicJWK.e || !publicJWK.n) {
-        res.status(400).json({ error: "ID und publicKey erforderlich" });
+        res.status(400).json({ message: "ID und publicKey erforderlich!" });
         return
     }
 
     try {
         const db = await openDB();
         await db.run("INSERT INTO identifiers (id, publicKey) VALUES (?, ?)", [id, JSON.stringify(publicJWK)]);
-        res.status(201).json({ message: "Bezeichner registriert" });
+        res.status(201).json({ message: "Identifier erfolgreich registriert!" });
         return
     } catch (err) {
-        res.status(500).json({ error: "Fehler beim Speichern des Bezeichners" });
+        res.status(500).json({ message: "Fehler beim Einfügen des Identifier in die Datenbank!" });
         return
     }
 });
@@ -78,12 +78,12 @@ app.get("/issuer/:id", async (req, res) => {
             publicKey= JSON.parse(result.publicKey);
         } catch (err) {
             console.error("Fehler beim Parsen des Public Keys: ", err)
-            res.status(500).json( { error: "Fehler beim Verarbeiten des Public Keys" })
+            res.status(500).json( { message: "Fehler beim Verarbeiten des Public Keys" })
         }
         res.status(200).json({ publicKey: publicKey });
         return
     } else {
-        res.status(404).json({ error: "Bezeichner nicht gefunden" });
+        res.status(404).json({ message: "Bezeichner nicht gefunden" });
         return
     }
 });
@@ -93,7 +93,7 @@ app.post("/register-schema", async (req, res) => {
     try {
         const { id, hash, definition } = req.body;
         if (!id || !hash || !definition) {
-            res.status(400).json({ error: "ID, Hash und Schema erforderlich" });
+            res.status(400).json({ message: "ID, Hash und Schema erforderlich" });
             return;
         }
 
@@ -102,15 +102,15 @@ app.post("/register-schema", async (req, res) => {
         const existingSchema = await db.get("SELECT id FROM schemas WHERE hash = ?", [hash]);
 
         if (existingSchema) {
-            res.status(409).json({ error: "Schema mit dieser Definition existiert bereits"})
+            res.status(409).json({ message: "Schema mit dieser Definition existiert bereits"})
             return;
         }
 
         await db.run("INSERT INTO schemas (id, hash, definition) VALUES (?, ?, ?)", [id, hash, JSON.stringify(definition)]);
-        res.json({ success: true, message: "Schema registriert" });
+        res.status(201).json({ message: "Schema registriert" });
         return;
     } catch (err) {
-        res.status(500).json({ error: "Fehler beim Speichern des Schemas" });
+        res.status(500).json({ message: "Fehler beim Speichern des Schemas" });
         return;
     }
 });
@@ -125,7 +125,7 @@ app.get("/schema/:id", async (req, res) => {
         console.log("Schema-Abfrage Ergebnis:", result);
 
         if (!result || !result.definition) {
-            res.status(404).json({ error: "Schema nicht gefunden" });
+            res.status(404).json({ message: "Schema nicht gefunden" });
             return;
         }
 
@@ -135,46 +135,39 @@ app.get("/schema/:id", async (req, res) => {
             schemaData = JSON.parse(result.definition);
         } catch (jsonError) {
             console.error("Fehler beim Parsen der Schema-Definition:", jsonError);
-            res.status(500).json({ error: "Schema-Definition ist ungültig" });
+            res.status(500).json({ message: "Schema-Definition ist ungültig" });
             return;
         }
         console.log("Schemadaten: ",schemaData)
         res.status(200).json({ schema: schemaData });
     } catch (err) {
         console.error("Fehler bei der Schema-Abfrage:", err);
-        res.status(500).json({ error: "Interner Serverfehler" });
+        res.status(500).json({ message: "Interner Serverfehler" });
     }
 });
 
-app.get("/get-schema-by-hash/:hash", async (req, res) => {
+app.post("/schema/id-by-hash", async (req, res) => {
+    console.log("Schema-Abfrage gestartet...");
     try {
-        const { hash } = req.params;
+        const { hash } = req.body;
         const db = await openDB();
         const result = await db.get("SELECT id FROM schemas WHERE hash = ?", [hash]);
 
-        console.log("Schema-Abfrage Ergebnis:", result);
+        console.log("Ergebnis der Abfrage:", result);
 
-        if (!result || !result.definition) {
-            res.status(404).json({ error: "Schema nicht gefunden" });
+        if (!result) {
+            res.status(404).json({ message: "Schema nicht gefunden" });
             return;
         }
 
-        // Sicherstellen, dass die Definition wirklich ein JSON-String ist
-        let schemaData;
-        try {
-            schemaData = JSON.parse(result.definition);
-        } catch (jsonError) {
-            console.error("Fehler beim Parsen der Schema-Definition:", jsonError);
-            res.status(500).json({ error: "Schema-Definition ist ungültig" });
-            return;
-        }
-        console.log("Schemadaten: ",schemaData)
-        res.status(200).json({ schema: schemaData });
+        // ✅ Rückgabe der ID
+        res.status(200).json({ id: result.id });
     } catch (err) {
         console.error("Fehler bei der Schema-Abfrage:", err);
-        res.status(500).json({ error: "Interner Serverfehler" });
+        res.status(500).json({ message: "Interner Serverfehler" });
     }
 });
+
 
 
 // Server starten
