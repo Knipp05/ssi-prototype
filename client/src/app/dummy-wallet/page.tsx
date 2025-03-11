@@ -3,6 +3,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { BACKEND_URL, VDR_URL } from "../constants";
+import { TempVP, VC } from "../types";
 
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
@@ -14,7 +15,7 @@ export default function DummyWallet() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [publicKey, setPublicKey] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [credentials, setCredentials] = useState<any[]>([]); // Array für Credentials
+  const [credentials, setCredentials] = useState<VC<Record<string, any>>[]>([]);
 
   // **Prüft, ob ein Identifier existiert oder erzeugt einen neuen**
   useEffect(() => {
@@ -92,11 +93,27 @@ export default function DummyWallet() {
     return { userId, publicJWK: publicKey };
   }
 
-  async function sendCredential(credential) {
-    if (!sessionId) {
-      alert("❌ Keine gültige Session-ID gefunden.");
+  async function createVerifiablePresentation<T>(credential: VC<T>) {
+    if (!identifier) {
+      alert("Kein Identifier gefunden.");
       return;
     }
+
+    const privateKeyJWK = JSON.parse(
+      localStorage.getItem("dummyWalletPrivateKey") || "{}"
+    );
+
+    if (!privateKeyJWK.kty) {
+      alert("Privater Schlüssel nicht gefunden!");
+      return;
+    }
+
+    const vp = {
+      type: "VerifiablePresentation",
+      verifiableCredential: [credential],
+    };
+
+    const signedVP = await signVP(vp, privateKeyJWK);
 
     const response = await fetch(`${BACKEND_URL}/verify-credential`, {
       method: "POST",
@@ -104,14 +121,123 @@ export default function DummyWallet() {
         "ngrok-skip-browser-warning": "true",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ sessionId, credential }),
+      body: JSON.stringify({ sessionId: sessionId, vp: signedVP }),
     });
 
-    const result = await response.json();
-    if (!result.success) {
+    if (!response.ok) {
       alert("❌ Fehler bei der Übertragung.");
+    } else {
+      alert("Verifikation erfolgreich!");
     }
   }
+
+  async function signVP<T>(vp: TempVP<T>, privateKeyJWK: object) {
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+    };
+
+    const payload = vp;
+    const encoder = new TextEncoder();
+
+    // Base64URL-encode Header und Payload
+    const encodedHeader = btoa(JSON.stringify(header))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    const encodedPayload = btoa(JSON.stringify(payload))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    // Private Key importieren
+    const key = await window.crypto.subtle.importKey(
+      "jwk",
+      privateKeyJWK,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+
+    // Signatur erzeugen
+    const signature = await window.crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      encoder.encode(`${encodedHeader}.${encodedPayload}`)
+    );
+
+    // Base64URL der Signatur erzeugen
+    const jwsSignature = Buffer.from(new Uint8Array(signature))
+      .toString("base64")
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    // **Korrektes Compact JWS zurückgeben**
+    const jws = `${encodedHeader}.${encodedPayload}.${jwsSignature}`;
+    const proof = {
+      type: "RsaSignature2018",
+      created: new Date().toISOString(),
+      proofPurpose: "authentication",
+      verificationMethod: `/issuer/${identifier}#key-1`,
+      jws: jws,
+    };
+
+    return {
+      ...vp,
+      proof,
+    };
+  }
+
+  /* async function signVP<T>(
+    vp: TempVP<T>,
+    privateKeyJWK: unknown
+  ): Promise<VP<T>> {
+    if (!vp || !privateKeyJWK) {
+      throw new Error("❌ VP oder Private Key fehlen!");
+    }
+
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+    };
+
+    const encodedVP = JSON.stringify(vp);
+    const encoder = new TextEncoder();
+    const key = await window.crypto.subtle.importKey(
+      "jwk",
+      privateKeyJWK,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+
+    const signature = await window.crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      encoder.encode(encodedVP)
+    );
+
+    const jws = Buffer.from(new Uint8Array(signature))
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    const proof = {
+      type: "RsaSignature2018",
+      created: new Date().toISOString(),
+      proofPurpose: "authentication",
+      verificationMethod: `/issuer/${identifier}#key-1`,
+      jws: jws,
+    };
+
+    return {
+      ...vp,
+      proof,
+    };
+  } */
 
   async function registerUserWithVDR(userId: string, publicKey: object) {
     try {
@@ -179,13 +305,16 @@ export default function DummyWallet() {
 
     const result = await response.json();
     if (!result.error) {
-      console.log("✅ Credential erhalten:", result.credential);
+      console.log("✅ Credential erhalten:", result.signedCredential);
 
       // **Speichere Credential in localStorage**
       const storedCredentials = JSON.parse(
         localStorage.getItem(CREDENTIALS_STORAGE_KEY) || "[]"
       );
-      const updatedCredentials = [...storedCredentials, result.credential];
+      const updatedCredentials = [
+        ...storedCredentials,
+        result.signedCredential,
+      ];
 
       localStorage.setItem(
         CREDENTIALS_STORAGE_KEY,
@@ -262,15 +391,15 @@ export default function DummyWallet() {
               className="border p-4 rounded-lg shadow-md bg-gray-50"
             >
               <p>
-                <strong>ID:</strong> {cred.credential.id}
+                <strong>ID:</strong> {cred.id}
               </p>
               <p>
                 <strong>Credential Schema:</strong>{" "}
-                {cred.credential.credentialSchema.id}
+                {`${VDR_URL}${cred.credentialSchema.id}`}
               </p>
               <p>
                 <strong>Type:</strong>{" "}
-                {cred.credential.type.map((type: string) => (
+                {cred.type.map((type: string) => (
                   <span
                     key={type}
                     className="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-sm mr-1"
@@ -280,28 +409,27 @@ export default function DummyWallet() {
                 ))}
               </p>
               <p>
-                <strong>Issuer:</strong> {cred.credential.issuer}
+                <strong>Issuer:</strong> {`${VDR_URL}${cred.issuer}`}
               </p>
               <p>
-                <strong>Issuance Date:</strong> {cred.credential.issuanceDate}
+                <strong>Issuance Date:</strong> {cred.issuanceDate}
               </p>
               <p>
-                <strong>Holder ID:</strong>{" "}
-                {cred.credential.credentialSubject.id}
+                <strong>Holder ID:</strong> {cred.credentialSubject.id}
               </p>
               <p>
-                <strong>Name:</strong> {cred.credential.credentialSubject.name}
+                <strong>Name:</strong> {cred.credentialSubject.name}
               </p>
               <p>
-                <strong>Alter:</strong> {cred.credential.credentialSubject.age}
+                <strong>Alter:</strong> {cred.credentialSubject.age}
               </p>
               <p>
                 <strong>Reg.-Nr.:</strong>{" "}
-                {cred.credential.credentialSubject.registration_number}
+                {cred.credentialSubject.registration_number}
               </p>
               <p className="truncate">
                 <strong>Proof:</strong>{" "}
-                <span className="text-xs text-gray-600">{cred.proof}</span>
+                <span className="text-xs text-gray-600">{cred.proof.jws}</span>
               </p>
             </li>
           ))}
@@ -320,6 +448,9 @@ export default function DummyWallet() {
           className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition"
         >
           📜 Test Credential anfordern
+        </button>
+        <button onClick={() => createVerifiablePresentation(credentials[0])}>
+          Sign first VC
         </button>
       </div>
     </div>

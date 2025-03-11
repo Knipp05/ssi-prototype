@@ -1,5 +1,7 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import QRCode from "react-qr-code";
 import { BACKEND_URL, FRONTEND_URL } from "../constants";
 
@@ -8,22 +10,11 @@ export default function SSILoginPage() {
   const wss = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    async function createSession() {
-      // 1️⃣ Backend fragt eine neue Session-ID an
-      const response = await fetch(`${BACKEND_URL}/create-session`, {
-        method: "GET",
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-          "Content-Type": "application/json",
-        },
-      });
-      const data = await response.json();
-      setSessionId(data.sessionId);
+    // 1️⃣ Session-ID direkt im Frontend generieren
+    const newSessionId = uuidv4();
+    setSessionId(newSessionId);
 
-      // 2️⃣ WebSocket-Verbindung herstellen
-      connectWebSocket(data.sessionId);
-    }
-
+    // 2️⃣ WebSocket-Verbindung mit dieser Session-ID aufbauen
     function connectWebSocket(sessionId: string) {
       const wsUrl = BACKEND_URL.replace(/^http/, "ws");
       wss.current = new WebSocket(wsUrl);
@@ -53,7 +44,7 @@ export default function SSILoginPage() {
       };
     }
 
-    createSession();
+    connectWebSocket(newSessionId);
 
     return () => {
       if (wss.current) {
@@ -65,11 +56,28 @@ export default function SSILoginPage() {
   }, []);
 
   return (
-    <div>
-      <h1>🔐 SSI-Login</h1>
-      <p>📷 QR-Code scannen, um sich zu verifizieren:</p>
+    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md text-center border border-gray-200">
+      <h1 className="text-2xl font-bold mb-4 text-gray-800">🔐 SSI-Login</h1>
+      <p className="mb-4 text-gray-600">
+        📷 QR-Code scannen, um sich zu verifizieren:
+      </p>
+
       {sessionId && (
-        <QRCode value={`${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`} />
+        <div className="bg-gray-100 p-6 rounded-lg inline-block shadow-md border border-gray-300">
+          <QRCode
+            value={`${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`}
+            className="mb-4 mx-auto"
+          />
+
+          <a
+            href={`${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-block px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"
+          >
+            🌐 Wallet in neuem Tab öffnen
+          </a>
+        </div>
       )}
     </div>
   );
