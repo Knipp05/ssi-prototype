@@ -22,5 +22,5 @@ export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "http://localhost:3002
 export const DATABASE_PATH = "./database.sqlite";
 export const PRIVATE_KEY_PATH = "private.pem";
 export const PUBLIC_KEY_PATH = "public.pem";
-export const ISSUER_UUID = process.env.ISSUER_UUID || uuidv4();
-export const TEMP_SCHEMA_ID = "5b398e08-b2c6-4d4b-a127-c4250f9779ea";
+export const ISSUER_UUID = process.env.ISSUER_UUID || uuidv4(); // hier lokale .env nutzen!
+export const JWT_SECRET = process.env.JWT_SECRET || "supersecretjwt"

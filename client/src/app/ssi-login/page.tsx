@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import QRCode from "react-qr-code";
 import { BACKEND_URL, FRONTEND_URL } from "../constants";
+import { useRouter } from "next/navigation";
 
 export default function SSILoginPage() {
+  const router = useRouter();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const wss = useRef<WebSocket | null>(null);
 
@@ -32,6 +34,12 @@ export default function SSILoginPage() {
       wss.current.onmessage = (event) => {
         const message = JSON.parse(event.data);
         console.log("📩 Nachricht vom Server:", message);
+
+        if (message.type === "verification-success" && message.jwt) {
+          console.log("JWT erhalten!:", message.jwt);
+          localStorage.setItem("authToken", message.jwt);
+          router.push("/dashboard");
+        }
       };
 
       wss.current.onclose = () => {
@@ -53,7 +61,7 @@ export default function SSILoginPage() {
         wss.current = null;
       }
     };
-  }, []);
+  }, [router]);
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md text-center border border-gray-200">

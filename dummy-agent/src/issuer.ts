@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
-import { generateKeyPair, exportJWK } from "jose";
+import { generateKeyPair, exportJWK, importJWK, SignJWT } from "jose";
+import { Request, Response, NextFunction } from "express"
 import * as crypto from "node:crypto";
 import fs from "fs";
-import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH } from "./constants.js";
+import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH, JWT_SECRET } from "./constants.js";
+import jwt from "jsonwebtoken"
+import { TEMP_SCHEMA_ID } from "./index.js";
 
 // Web Crypto API für jose setzen
 if (!globalThis.crypto) {
@@ -194,5 +197,113 @@ async function registerSchema(schema: object) {
         }
     } catch (err) {
         console.error("Fehler beim Senden des Schemas an den VDR:", err);
+    }
+}
+
+export function issueJWT(userId: string) {
+    return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1h"})
+}
+
+export async function issueCredential(req: Request, res: Response) {
+    const { holderId } = req.body;
+    console.log("Anfrage zur Ausstellung von: ", holderId)
+    //const { schemaId, holderId, data } = req.body;
+
+    try {
+
+        /* if (!schemaId || !holderId || !data) {
+            res.status(400).json({ error: "Schema ID, Holder ID und Credential-Daten erforderlich" });
+            return;
+        } */  
+        if (!holderId) {
+            res.status(400).json({ error: "Holder ID erforderlich" });
+            return;
+        }
+
+        const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`, {
+            method: "GET",
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+              "Content-Type": "application/json",
+            },
+          });
+
+        if (!userResponse.ok) {
+            res.status(404).json({ error: "Benutzer-Identifier nicht gefunden" });
+            return;
+        }
+
+        const schemaId = TEMP_SCHEMA_ID //zunächst hardcoded
+        console.log("Schema ID: ", schemaId)
+        const demoCredentialSubject = {
+            id: holderId,
+            name: "Niklas",
+            age: 24,
+            registration_number: 82419
+        }
+
+        // Prüfen, ob das Schema existiert
+        const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`, {
+            method: "GET",
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+              "Content-Type": "application/json",
+            },
+          });
+
+        if (!schemaResponse.ok) {
+            res.status(404).json({ error: "Schema nicht gefunden" });
+            return;
+        }
+        const schemaData = await schemaResponse.json();
+        console.log("Schemadaten: ", schemaData)
+
+        if (!validateSchema(demoCredentialSubject, schemaData.schema)) {
+            res.status(400).json({ error: "Daten entsprechen nicht dem Schema"})
+            return;
+        }
+
+        // Laden des privaten Schlüssels des Issuers
+        if (!fs.existsSync(PRIVATE_KEY_PATH)) {
+            res.status(500).json({ error: "Privater Schlüssel des Issuers fehlt" });
+            return;
+        }
+        const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
+
+        // Credential-Objekt erstellen
+        const credential = {
+            id: uuidv4(),
+            type: [ "VerifiableCredential", "EnrolmentCredential"],
+            issuer: `/issuer/${ISSUER_UUID}`,
+            issuanceDate: new Date().toISOString(),
+            credentialSubject: demoCredentialSubject,
+            credentialSchema: {
+                id: `/schema/${schemaId}`,
+            }
+        };
+
+        // Credential signieren
+        const proof = {
+            type: "JsonWebSignature2020",
+            created: new Date().toISOString(),
+            proofPurpose: "assertionMethod",
+            verificationMethod: `/issuer/${ISSUER_UUID}#key-1`,
+            jws: await new SignJWT(credential)
+            .setProtectedHeader({ alg: "RS256" })
+            .sign(await importJWK(privateKeyJWK, "RS256"))
+        }
+        
+        const signedCredential = {
+            ...credential,
+            proof: proof
+        }
+
+        res.status(200).json({ signedCredential });
+        return;
+
+    } catch (err) {
+        console.error("Fehler bei der Credential-Erstellung:", err);
+        res.status(500).json({ error: "Fehler bei der Credential-Ausstellung" });
+        return;
     }
 }
