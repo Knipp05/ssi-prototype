@@ -3,18 +3,21 @@ import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import cors from "cors";
 import { initDB } from "./database.js";
-import QRCode from "qrcode"
-import { createSchema, initIssuer, issueCredential } from "./issuer.js";
-import { testCertificationSchema } from "./demo_data.js";
-import { BACKEND_URL, FRONTEND_URL, PORT } from "./constants.js";
+import { initSchemas, initIssuer, offerCredential, fetchSchemas, acceptCredentialOffer, declineOffer } from "./issuer.js";
+import { BACKEND_URL, PORT } from "./constants.js";
 import { loginUser, verifyPresentation } from "./verifier.js";
+import { Offer } from "./types.js";
+import { v4 as uuidv4 } from "uuid"
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server })
 
 export const activeSessions = new Map<string, WebSocket>();
-export const TEMP_SCHEMA_ID = await createSchema(testCertificationSchema) || ""
+export const activeWallets = new Map<string, WebSocket>();
+export const pendingOffers = new Map<string, Offer>();
+
+export const supportedSchemas = await initSchemas();
 
 // Middleware
 app.use(cors({
@@ -37,28 +40,76 @@ app.use(express.json());
             try {
                 const { type, sessionId } = JSON.parse(message.toString());
 
-                if (type === "register-session" && sessionId) {
+                if (type === "register-session") {
+                    const sessionId = uuidv4();
                     activeSessions.set(sessionId, ws);
                     console.log(`Session ${sessionId} registriert`);
-                } 
+                    ws.send(JSON.stringify({ type: "register-session", sessionId}))
+                } else if (type === "register-wallet" && sessionId) {
+                    activeWallets.set(sessionId, ws)
+                    console.log(`Wallet für Identifier ${sessionId} ist aktiv!`)
+
+                    const openOffers = Array.from(pendingOffers.values())
+                        .filter((offer) => offer.sessionId === sessionId);
+
+                    if (openOffers.length > 0) {
+                        openOffers.forEach(offer => ws.send(JSON.stringify({ type: "credential-offer", offer})))    
+                    }
+                }
+                
+                if (type === "verification-result" && sessionId) {
+                    console.log(`Verifikation erfolgreich für Session: ${sessionId}`);
+
+                    wss.clients.forEach(client => {
+                        client.send(JSON.stringify({
+                            type: "verification-success",
+                            sessionId: sessionId
+                        }));
+                    });
+                }
 
             } catch (error) {
                 console.error("Fehler bei WebSocket-Nachricht: ", error)
             }
-
-            const data = JSON.parse(message.toString());
     
-            if (data.type === "verification-result" && data.sessionId) {
-                console.log(`✅ Verifikation erfolgreich für Session: ${data.sessionId}`);
-                // Nachricht an alle verbundenen Clients senden
-                wss.clients.forEach(client => {
-                    client.send(JSON.stringify({
-                        type: "verification-success",
-                        sessionId: data.sessionId
-                    }));
-                });
-            }
         });
+
+        ws.on("close", () => {
+            console.log("🔌 WebSocket getrennt");
+    
+            const closedClientSession = [...activeSessions.entries()]
+                .find(([key, value]) => value === ws)?.[0];
+
+            const closedWalletSession = [...activeWallets.entries()]
+                .find(([key, value]) => value === ws)?.[0];
+    
+            if (closedClientSession) {
+                console.log(`❌ Session ${closedClientSession} beendet`);
+                activeSessions.delete(closedClientSession);
+            } else if (closedWalletSession) {
+                console.log(`❌ Session ${closedClientSession} beendet`);
+                activeWallets.delete(closedWalletSession);
+            }
+
+            if (closedClientSession || closedWalletSession) {
+                const removedOffers = [...pendingOffers.entries()]
+                .filter(([_, value]) => value.sessionId === closedClientSession)
+                .map(([key]) => key);
+    
+                removedOffers.forEach((offerId) => {
+                    console.log(`🗑 Lösche Offer ${offerId}`);
+                    pendingOffers.delete(offerId);
+                });
+    
+                // Informiere **nur** das Dashboard über die Offer-Löschung
+                const dashboardSocket = activeSessions.get(closedClientSession || closedWalletSession!); // hier noch sichern!
+                if (dashboardSocket) {
+                    removedOffers.forEach(offerId => {
+                        dashboardSocket.send(JSON.stringify({ type: "offer_deleted", offerId }));
+                    });
+                }
+            }
+        });   
     
         ws.send(JSON.stringify({ message: "Verbindung erfolgreich!" }));
     });
@@ -69,19 +120,15 @@ app.use(express.json());
 
     app.post("/login", (req, res) => loginUser(req, res));
 
-    app.post("/issue-credential", (req, res) => issueCredential(req, res));
+    app.post("/offer-credential", (req, res) => offerCredential(req, res))
+
+    app.post("/accept-offer", (req, res) => acceptCredentialOffer(req, res))
+
+    app.post("/decline-offer", (req, res) => declineOffer(req, res))
 
     app.post("/verify-credential", (req, res) => verifyPresentation(req, res))
 
-    app.get("/generate-qr", async (req, res) => {
-        try {
-            const loginURL = `${FRONTEND_URL}/ssi-login`;
-            const qrCodeDataURL = await QRCode.toDataURL(loginURL);
-            res.json({ success: true, qrCode: qrCodeDataURL, url: loginURL });
-        } catch (err) {
-            res.status(500).json({ error: "Fehler beim Erstellen des QR-Codes" });
-        }
-    });
+    app.get("/get-schemas", (req, res) => fetchSchemas(req, res))
 
     server.listen(PORT,  () => {
         console.log(`✅ Server läuft auf ${BACKEND_URL}`);

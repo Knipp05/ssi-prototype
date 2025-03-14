@@ -1,11 +1,13 @@
 import { v4 as uuidv4 } from "uuid";
 import { generateKeyPair, exportJWK, importJWK, SignJWT } from "jose";
-import { Request, Response, NextFunction } from "express"
+import { Request, Response } from "express"
 import * as crypto from "node:crypto";
 import fs from "fs";
-import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH, JWT_SECRET } from "./constants.js";
+import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH, JWT_SECRET, FRONTEND_URL } from "./constants.js";
 import jwt from "jsonwebtoken"
-import { TEMP_SCHEMA_ID } from "./index.js";
+import { activeSessions, activeWallets, pendingOffers, supportedSchemas } from "./index.js";
+import { testCertificationSchema } from "./demo_data.js";
+import { Offer } from "./types.js";
 
 // Web Crypto API für jose setzen
 if (!globalThis.crypto) {
@@ -73,7 +75,6 @@ async function loadOrGenerateKeys(): Promise<void> {
     await registerIssuer(publicJWK);
 }
 
-
 export function validateSchema(data: object, schema: any): boolean {
     console.log("Eingehende Daten:", data);
     console.log("Erwartetes Schema:", schema);
@@ -124,7 +125,38 @@ export async function initIssuer(): Promise<void> {
     }
 }
 
-export async function createSchema(schemaDefinition: object): Promise<string> {
+export async function initSchemas(): Promise<Map<string, string>> {
+    console.log("🔍 Prüfe, ob alle notwendigen Schemata registriert sind...");
+    const supportedSchemas = new Map<string, string>();
+
+    const requiredSchemas = {
+        EnrollmentCredential: testCertificationSchema
+    };
+
+    for (const [type, schemaDefinition] of Object.entries(requiredSchemas)) {
+        const schemaHash = generateSchemaHash(schemaDefinition);
+        const existingSchemaId = await checkIfSchemaExists(schemaHash);
+
+        if (existingSchemaId) {
+            console.log(`✅ Schema ${type} existiert bereits mit ID: ${existingSchemaId}`);
+            supportedSchemas.set(type, existingSchemaId)
+        } else {
+            console.log(`⚠️ Schema ${type} nicht gefunden. Registriere neu...`);
+            const newSchemaId = await createSchema(schemaDefinition);
+            console.log(`📌 Neues Schema ${type} registriert mit ID: ${newSchemaId}`);
+            supportedSchemas.set(type, newSchemaId)
+        }
+    }
+    return supportedSchemas
+}
+
+export async function fetchSchemas(req: Request, res: Response) {
+    const schemas = Object.fromEntries(supportedSchemas);
+    res.status(200).json({ schemas })
+}
+
+
+async function createSchema(schemaDefinition: object): Promise<string> {
     const schemaHash = generateSchemaHash(schemaDefinition)
 
     // Prüfe, ob das Schema bereits existiert
@@ -204,20 +236,92 @@ export function issueJWT(userId: string) {
     return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1h"})
 }
 
-export async function issueCredential(req: Request, res: Response) {
-    const { holderId } = req.body;
+export async function offerCredential(req: Request, res: Response) {
+    const { sessionId, schemaId, schemaType } = req.body;
+    if (!sessionId || !schemaId) {
+        res.status(400).json({ message: "Session ID und Schema ID erforderlich" });
+        return;
+    }
+
+   let offerId = [...pendingOffers.entries()] // entfernen, wenn nicht mehrmals aufgerufen!
+        .find(([_, offer]) => offer.sessionId === sessionId)?.[0];
+    
+    if (!offerId) {
+        offerId = uuidv4();
+    }
+
+    const offer: Offer = {
+        offerId,
+        schemaId,
+        schemaType,
+        issuerId: ISSUER_UUID,
+        sessionId
+    };
+
+    if (activeWallets.has(sessionId)) {
+        console.log("Wallet aktiv, direkt senden.");
+        pendingOffers.set(offerId, offer)
+        activeWallets.get(sessionId)?.send(JSON.stringify({type: "credential-offer", offer: offer}));
+        res.status(200).json({ message: "Offer direkt an Wallet gesendet" });
+    } else {
+        console.log("Wallet nicht aktiv. Zeige QR-Code zur Öffnung:", offerId);
+        pendingOffers.set(offerId, offer)
+        const walletUrl = `${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`;
+        res.status(200).json({ url: walletUrl})
+    }
+}
+
+export async function acceptCredentialOffer(req: Request, res: Response) {
+    const { offerId, holderId } = req.body;
+    if (!offerId || !holderId) {
+        res.status(400).json({ message: "Offer ID, Holder ID, Schema ID erforderlich" });
+        return;
+    }
+
+    const credentialOffer = pendingOffers.get(offerId);
+    console.log(credentialOffer)
+    if (!credentialOffer) {
+        res.status(404).json({ message: "Credential Offer nicht gefunden oder abgelaufen" });
+        return;
+    }
+
+    if (!(activeWallets.has(credentialOffer.sessionId))) {
+        console.log("Session ungültig oder nicht aktiv!")
+        res.status(404).json({ message: "Session ungültig oder nicht aktiv!" })
+        return;
+    }
+
+    const credential = await issueCredential(holderId, credentialOffer.schemaId);
+    removeOffer(credentialOffer)
+    res.status(200).json({ credential })
+}
+
+export function declineOffer(req: Request, res: Response) {
+    const { offerId } = req.body;
+    const credentialOffer = pendingOffers.get(offerId)
+    if (!credentialOffer) {
+        res.status(404).json({ message: "Offer nicht gefunden" });
+        return;
+    }
+    removeOffer(credentialOffer)
+    res.status(200).json({ message: "Offer abgelehnt" });
+}
+
+function removeOffer(offer: Offer) {
+    const dashBoardSocket = activeSessions.get(offer.sessionId);
+    if (dashBoardSocket) {
+        console.log("Nachricht an Websocket: ", offer.sessionId)
+        dashBoardSocket.send(JSON.stringify({ type: "offer-deleted", offer: offer.offerId }));
+    }
+    pendingOffers.delete(offer.offerId)
+}
+
+async function issueCredential(holderId: string, schemaId: string) {
     console.log("Anfrage zur Ausstellung von: ", holderId)
-    //const { schemaId, holderId, data } = req.body;
 
     try {
-
-        /* if (!schemaId || !holderId || !data) {
-            res.status(400).json({ error: "Schema ID, Holder ID und Credential-Daten erforderlich" });
-            return;
-        } */  
-        if (!holderId) {
-            res.status(400).json({ error: "Holder ID erforderlich" });
-            return;
+        if (!holderId || !schemaId) {
+            return { message: "Holder ID und Schema ID erforderlich!" };
         }
 
         const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`, {
@@ -229,13 +333,11 @@ export async function issueCredential(req: Request, res: Response) {
           });
 
         if (!userResponse.ok) {
-            res.status(404).json({ error: "Benutzer-Identifier nicht gefunden" });
-            return;
+            return { error: "Benutzer-Identifier nicht gefunden" };
         }
 
-        const schemaId = TEMP_SCHEMA_ID //zunächst hardcoded
         console.log("Schema ID: ", schemaId)
-        const demoCredentialSubject = {
+        const demoCredentialSubject = { // später durch dynamische Daten ersetzen!
             id: holderId,
             name: "Niklas",
             age: 24,
@@ -252,21 +354,18 @@ export async function issueCredential(req: Request, res: Response) {
           });
 
         if (!schemaResponse.ok) {
-            res.status(404).json({ error: "Schema nicht gefunden" });
-            return;
+            return { error: "Schema nicht gefunden" };
         }
         const schemaData = await schemaResponse.json();
         console.log("Schemadaten: ", schemaData)
 
         if (!validateSchema(demoCredentialSubject, schemaData.schema)) {
-            res.status(400).json({ error: "Daten entsprechen nicht dem Schema"})
-            return;
+            return { error: "Daten entsprechen nicht dem Schema"};
         }
 
         // Laden des privaten Schlüssels des Issuers
         if (!fs.existsSync(PRIVATE_KEY_PATH)) {
-            res.status(500).json({ error: "Privater Schlüssel des Issuers fehlt" });
-            return;
+            return { error: "Privater Schlüssel des Issuers fehlt" };
         }
         const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
 
@@ -298,12 +397,10 @@ export async function issueCredential(req: Request, res: Response) {
             proof: proof
         }
 
-        res.status(200).json({ signedCredential });
-        return;
+        return { signedCredential };
 
     } catch (err) {
         console.error("Fehler bei der Credential-Erstellung:", err);
-        res.status(500).json({ error: "Fehler bei der Credential-Ausstellung" });
-        return;
+        return { error: "Fehler bei der Credential-Ausstellung" };
     }
 }
