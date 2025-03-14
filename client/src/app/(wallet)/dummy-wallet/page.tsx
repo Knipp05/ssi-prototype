@@ -2,8 +2,8 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { BACKEND_URL, VDR_URL } from "../constants";
-import { TempVP, VC } from "../types";
+import { BACKEND_URL, VDR_URL } from "../../constants";
+import { CredentialOffer, VC } from "../../types";
 
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
@@ -12,8 +12,9 @@ export default function DummyWallet() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
   const [identifier, setIdentifier] = useState<string>("");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [credentialOffers, setCredentialOffers] = useState<CredentialOffer[]>(
+    []
+  );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [credentials, setCredentials] = useState<VC<Record<string, any>>[]>([]);
 
@@ -37,20 +38,44 @@ export default function DummyWallet() {
           JSON.stringify({ id: userId, publicKey: publicJWK })
         );
         setIdentifier(userId);
-        setPublicKey(JSON.stringify(publicJWK, null, 2));
 
         await registerUserWithVDR(userId, publicJWK);
       } else {
         const storedData = JSON.parse(storedId);
         console.log("✅ Identifier gefunden:", storedData.id);
         setIdentifier(storedData.id);
-        setPublicKey(JSON.stringify(storedData.publicKey, null, 2));
         await registerUserWithVDR(storedData.id, storedData.publicKey);
       }
     }
 
     checkOrCreateIdentifier();
   }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const wsInstance = new WebSocket(BACKEND_URL.replace(/^http/, "ws")); // ggf. dynamischer gestalten
+
+    wsInstance.onopen = () => {
+      console.log("Wallet WebSocket verbunden!");
+      wsInstance.send(JSON.stringify({ type: "register-wallet", sessionId }));
+    };
+
+    wsInstance.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "credential-offer") {
+        console.log("Neues Credential Offer erhalten:", message);
+        setCredentialOffers((oldCredentialOffers) => [
+          ...oldCredentialOffers,
+          message.offer,
+        ]);
+      }
+    };
+
+    return () => {
+      wsInstance.close();
+    };
+  }, [sessionId]);
 
   // **Lädt alle gespeicherten Credentials aus localStorage**
   useEffect(() => {
@@ -93,7 +118,77 @@ export default function DummyWallet() {
     return { userId, publicJWK: publicKey };
   }
 
-  async function createVerifiablePresentation<T>(credential: VC<T>) {
+  async function acceptCredentialOffer(offer: CredentialOffer) {
+    console.log("Angebot akzeptiert. Anfrage an Backend...");
+
+    const response = await fetch(`${BACKEND_URL}/accept-offer`, {
+      method: "POST",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        holderId: identifier,
+        offerId: offer.offerId,
+      }),
+    });
+
+    if (!response.ok) {
+      alert("❌ Fehler bei der Ausstellung des Credentials");
+      return;
+    }
+
+    const result = await response.json();
+    console.log("✅ Credential erhalten: ", result.credential.signedCredential);
+
+    const newCredential = result.credential.signedCredential;
+
+    // **Bestehende Credentials aus localStorage laden**
+    const storedCredentials = JSON.parse(
+      localStorage.getItem("dummyWalletCredentials") || "[]"
+    );
+
+    // **Neues Credential hinzufügen**
+    const updatedCredentials = [...storedCredentials, newCredential];
+
+    // **Speichern im localStorage**
+    localStorage.setItem(
+      "dummyWalletCredentials",
+      JSON.stringify(updatedCredentials)
+    );
+
+    // **State aktualisieren**
+    setCredentials(updatedCredentials);
+    setCredentialOffers((oldCredentialOffers) =>
+      oldCredentialOffers.filter(
+        (offerElement) => offerElement.offerId !== offer.offerId
+      )
+    );
+  }
+
+  async function declineCredentialOffer(offer: CredentialOffer) {
+    const response = await fetch(`${BACKEND_URL}/decline-offer`, {
+      method: "POST",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        offerId: offer.offerId,
+      }),
+    });
+    if (!response.ok) {
+      console.log("Fehler beim Ablehnen des Credentials");
+    }
+    console.log("Angebot abgelehnt.");
+    setCredentialOffers((oldCredentialOffers) =>
+      oldCredentialOffers.filter(
+        (offerElement) => offerElement.offerId !== offer.offerId
+      )
+    );
+  }
+
+  /* async function createVerifiablePresentation<T>(credential: VC<T>) {
     if (!identifier) {
       alert("Kein Identifier gefunden.");
       return;
@@ -188,55 +283,6 @@ export default function DummyWallet() {
       ...vp,
       proof,
     };
-  }
-
-  /* async function signVP<T>(
-    vp: TempVP<T>,
-    privateKeyJWK: unknown
-  ): Promise<VP<T>> {
-    if (!vp || !privateKeyJWK) {
-      throw new Error("❌ VP oder Private Key fehlen!");
-    }
-
-    const header = {
-      alg: "RS256",
-      typ: "JWT",
-    };
-
-    const encodedVP = JSON.stringify(vp);
-    const encoder = new TextEncoder();
-    const key = await window.crypto.subtle.importKey(
-      "jwk",
-      privateKeyJWK,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-
-    const signature = await window.crypto.subtle.sign(
-      "RSASSA-PKCS1-v1_5",
-      key,
-      encoder.encode(encodedVP)
-    );
-
-    const jws = Buffer.from(new Uint8Array(signature))
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-    const proof = {
-      type: "RsaSignature2018",
-      created: new Date().toISOString(),
-      proofPurpose: "authentication",
-      verificationMethod: `/issuer/${identifier}#key-1`,
-      jws: jws,
-    };
-
-    return {
-      ...vp,
-      proof,
-    };
   } */
 
   async function registerUserWithVDR(userId: string, publicKey: object) {
@@ -285,7 +331,7 @@ export default function DummyWallet() {
     }
   }
 
-  async function requestCredential() {
+  /* async function requestCredential() {
     const storedData = localStorage.getItem(STORAGE_KEY);
     if (!storedData) {
       alert("⚠ Kein Benutzer-Identifier gefunden. Bitte neu registrieren.");
@@ -326,14 +372,13 @@ export default function DummyWallet() {
     } else {
       alert("❌ Fehler bei der Ausstellung des Credentials.");
     }
-  }
+  } */
 
   function clearData() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
     localStorage.removeItem("dummyWalletPrivateKey");
     setIdentifier("");
-    setPublicKey(null);
     setCredentials([]);
     alert("🗑 Alle gespeicherten Daten wurden gelöscht.");
   }
@@ -343,6 +388,36 @@ export default function DummyWallet() {
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-4">
         Dummy Wallet
       </h1>
+
+      {/* 📢 Credential Offer Benachrichtigung */}
+      {credentialOffers?.map((offer) => (
+        <div
+          key={offer.offerId}
+          className="p-4 mb-4 border border-yellow-500 bg-yellow-100 text-yellow-900 rounded-lg shadow-md"
+        >
+          <p className="font-semibold">📜 Neues Credential Angebot!</p>
+          <p>
+            <strong>Credential:</strong> {offer.schemaType}
+          </p>
+          <p>
+            <strong>Aussteller:</strong> {offer.issuerId}
+          </p>
+          <div className="mt-3 flex gap-4">
+            <button
+              onClick={() => acceptCredentialOffer(offer)}
+              className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition"
+            >
+              ✅ Annehmen
+            </button>
+            <button
+              onClick={() => declineCredentialOffer(offer)}
+              className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition"
+            >
+              ❌ Ablehnen
+            </button>
+          </div>
+        </div>
+      ))}
 
       <div className="flex items-center justify-between mb-4 p-4 bg-gray-100 rounded-lg shadow-md">
         <p className="text-lg font-medium">
@@ -368,7 +443,6 @@ export default function DummyWallet() {
                 JSON.stringify({ id: userId, publicKey: publicJWK })
               );
               setIdentifier(userId);
-              setPublicKey(JSON.stringify(publicJWK, null, 2));
 
               await registerUserWithVDR(userId, publicJWK);
             }}
@@ -442,15 +516,6 @@ export default function DummyWallet() {
           className="px-4 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 transition"
         >
           🗑 Identifier & Daten löschen
-        </button>
-        <button
-          onClick={requestCredential}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition"
-        >
-          📜 Test Credential anfordern
-        </button>
-        <button onClick={() => createVerifiablePresentation(credentials[0])}>
-          Sign first VC
         </button>
       </div>
     </div>

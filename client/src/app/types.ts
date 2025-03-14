@@ -28,3 +28,11 @@ export type VP<T> = TempVP<T> & {
         jws: string;
     };
 };
+
+export type CredentialOffer = {
+    offerId: string;
+    schemaId: string;
+    schemaType: string;
+    issuerId: string;
+    sessionId: string;
+  };
