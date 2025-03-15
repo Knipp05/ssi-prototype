@@ -1,16 +1,20 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { BACKEND_URL } from "../constants";
-import { CredentialOffer } from "../types";
+import { CredentialOffer, PresentationRequest } from "../types";
 
 const WebSocketContext = createContext<{
   offers: CredentialOffer[];
+  requests: PresentationRequest[];
   sessionId: string;
-}>({ offers: [], sessionId: "" });
+  loginError: boolean;
+}>({ offers: [], requests: [], sessionId: "", loginError: false });
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [offers, setOffers] = useState<CredentialOffer[]>([]);
+  const [requests, setRequests] = useState<PresentationRequest[]>([]);
   const [sessionId, setSessionId] = useState<string>("");
+  const [loginError, setLoginError] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -41,6 +45,15 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
           );
         }
 
+        if (message.type === "request-deleted") {
+          setRequests((prevRequests) =>
+            prevRequests.filter(
+              (request) => request.requestId !== message.requestId
+            )
+          );
+          setLoginError(true);
+        }
+
         if (message.type === "credential-offer") {
           setOffers((prevOffers) => [...prevOffers, message.offer]);
         }
@@ -64,7 +77,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <WebSocketContext.Provider value={{ sessionId, offers }}>
+    <WebSocketContext.Provider
+      value={{ sessionId, offers, requests, loginError }}
+    >
       {children}
     </WebSocketContext.Provider>
   );

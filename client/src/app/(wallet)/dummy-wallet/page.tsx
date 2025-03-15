@@ -3,18 +3,26 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { BACKEND_URL, VDR_URL } from "../../constants";
-import { CredentialOffer, VC } from "../../types";
+import { CredentialOffer, PresentationRequest, TempVP, VC } from "../../types";
+import Credential from "./Credential";
 
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
 
 export default function DummyWallet() {
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get("sessionId");
+  const [sessionId, setSessionId] = useState<string | null>(
+    searchParams.get("sessionId")
+  );
   const [identifier, setIdentifier] = useState<string>("");
   const [credentialOffers, setCredentialOffers] = useState<CredentialOffer[]>(
     []
   );
+  const [presentationRequests, setPresentationRequests] = useState<
+    PresentationRequest[]
+  >([]);
+  const [activePresentationRequest, setActivePresentationRequest] =
+    useState<PresentationRequest | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [credentials, setCredentials] = useState<VC<Record<string, any>>[]>([]);
 
@@ -52,6 +60,12 @@ export default function DummyWallet() {
   }, []);
 
   useEffect(() => {
+    if (presentationRequests.length > 0) {
+      setActivePresentationRequest(presentationRequests[0]);
+    }
+  }, [presentationRequests]);
+
+  useEffect(() => {
     if (!sessionId) return;
 
     const wsInstance = new WebSocket(BACKEND_URL.replace(/^http/, "ws")); // ggf. dynamischer gestalten
@@ -69,6 +83,16 @@ export default function DummyWallet() {
           ...oldCredentialOffers,
           message.offer,
         ]);
+      }
+      if (message.type === "presentation-request") {
+        console.log("Neue Anfrage für Presentation erhalten:", message);
+        setPresentationRequests((oldPresentationRequests) => [
+          ...oldPresentationRequests,
+          message.request,
+        ]);
+      }
+      if (message.type === "register-error") {
+        setSessionId(null);
       }
     };
 
@@ -188,7 +212,30 @@ export default function DummyWallet() {
     );
   }
 
-  /* async function createVerifiablePresentation<T>(credential: VC<T>) {
+  async function declinePresentationRequest(request: PresentationRequest) {
+    const response = await fetch(`${BACKEND_URL}/decline-request`, {
+      method: "POST",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requestId: request.requestId,
+      }),
+    });
+    if (!response.ok) {
+      console.log("Fehler beim Ablehnen der Anfrage");
+    }
+    console.log("Anfrage abgelehnt.");
+    setPresentationRequests((oldPresentationRequests) =>
+      oldPresentationRequests.filter(
+        (requestElement) => requestElement.requestId !== request.requestId
+      )
+    );
+    setActivePresentationRequest(null);
+  }
+
+  async function createVerifiablePresentation<T>(credential: VC<T>) {
     if (!identifier) {
       alert("Kein Identifier gefunden.");
       return;
@@ -283,7 +330,7 @@ export default function DummyWallet() {
       ...vp,
       proof,
     };
-  } */
+  }
 
   async function registerUserWithVDR(userId: string, publicKey: object) {
     try {
@@ -331,49 +378,6 @@ export default function DummyWallet() {
     }
   }
 
-  /* async function requestCredential() {
-    const storedData = localStorage.getItem(STORAGE_KEY);
-    if (!storedData) {
-      alert("⚠ Kein Benutzer-Identifier gefunden. Bitte neu registrieren.");
-      return;
-    }
-
-    const { id: userId } = JSON.parse(storedData);
-
-    const response = await fetch(`${BACKEND_URL}/issue-credential`, {
-      method: "POST",
-      headers: {
-        "ngrok-skip-browser-warning": "true",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ holderId: userId }),
-    });
-
-    const result = await response.json();
-    if (!result.error) {
-      console.log("✅ Credential erhalten:", result.signedCredential);
-
-      // **Speichere Credential in localStorage**
-      const storedCredentials = JSON.parse(
-        localStorage.getItem(CREDENTIALS_STORAGE_KEY) || "[]"
-      );
-      const updatedCredentials = [
-        ...storedCredentials,
-        result.signedCredential,
-      ];
-
-      localStorage.setItem(
-        CREDENTIALS_STORAGE_KEY,
-        JSON.stringify(updatedCredentials)
-      );
-
-      // **State aktualisieren**
-      setCredentials(updatedCredentials);
-    } else {
-      alert("❌ Fehler bei der Ausstellung des Credentials.");
-    }
-  } */
-
   function clearData() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
@@ -388,6 +392,17 @@ export default function DummyWallet() {
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-4">
         Dummy Wallet
       </h1>
+      {!sessionId && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-md">
+          <p className="font-semibold">⚠ Keine gültige Session gefunden!</p>
+          <p>
+            Möglicherweise funktioniert das Empfangen und Senden von Credentials
+            nicht richtig. Öffne die Wallet aus einer gültigen Session heraus (
+            <span className="font-semibold">QR Code oder Link</span>), um sie
+            vollständig nutzen zu können.
+          </p>
+        </div>
+      )}
 
       {/* 📢 Credential Offer Benachrichtigung */}
       {credentialOffers?.map((offer) => (
@@ -411,6 +426,42 @@ export default function DummyWallet() {
             </button>
             <button
               onClick={() => declineCredentialOffer(offer)}
+              className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition"
+            >
+              ❌ Ablehnen
+            </button>
+          </div>
+        </div>
+      ))}
+      {/* 📢 Credential Offer Benachrichtigung */}
+      {presentationRequests?.map((presentation) => (
+        <div
+          key={presentation.requestId}
+          className="p-4 mb-4 border border-yellow-500 bg-yellow-100 text-yellow-900 rounded-lg shadow-md"
+        >
+          <p className="font-semibold">📜 Neue Anfrage für Präsentation!</p>
+          <p>
+            <strong>Nachweistyp:</strong> {presentation.requiredSchemaTypes[1]}
+          </p>
+          <p>
+            {/* <strong>Aussteller:</strong> {presentation.} // hier später Namen des Anfragers */}
+          </p>
+          <div className="mt-3 flex gap-4">
+            {activePresentationRequest ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                <span>Warten auf Auswahl...</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setActivePresentationRequest(presentation)}
+                className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition"
+              >
+                ✅ Credential auswählen
+              </button>
+            )}
+            <button
+              onClick={() => declinePresentationRequest(presentation)}
               className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition"
             >
               ❌ Ablehnen
@@ -455,57 +506,31 @@ export default function DummyWallet() {
 
       <h2 className="text-xl font-semibold mb-3">📜 Meine Credentials</h2>
 
-      {credentials.length === 0 ? (
+      {activePresentationRequest ? (
+        credentials.length === 0 ? (
+          <p className="text-gray-500">Keine Credentials gespeichert.</p>
+        ) : (
+          credentials.map((cred) => (
+            <div
+              key={cred.id}
+              onClick={() => createVerifiablePresentation(cred)}
+              className={`${
+                activePresentationRequest.requiredSchemaTypes[1] ===
+                cred.type[1]
+                  ? "cursor-pointer border-yellow-500 bg-yellow-100 text-yellow-900 hover:scale-105 hover:shadow-lg"
+                  : "cursor-not-allowed opacity-50"
+              }`}
+            >
+              <Credential credential={cred} />
+            </div>
+          ))
+        )
+      ) : credentials.length === 0 ? (
         <p className="text-gray-500">Keine Credentials gespeichert.</p>
       ) : (
         <ul className="space-y-4">
-          {credentials.map((cred, index) => (
-            <li
-              key={index}
-              className="border p-4 rounded-lg shadow-md bg-gray-50"
-            >
-              <p>
-                <strong>ID:</strong> {cred.id}
-              </p>
-              <p>
-                <strong>Credential Schema:</strong>{" "}
-                {`${VDR_URL}${cred.credentialSchema.id}`}
-              </p>
-              <p>
-                <strong>Type:</strong>{" "}
-                {cred.type.map((type: string) => (
-                  <span
-                    key={type}
-                    className="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-sm mr-1"
-                  >
-                    {type}
-                  </span>
-                ))}
-              </p>
-              <p>
-                <strong>Issuer:</strong> {`${VDR_URL}${cred.issuer}`}
-              </p>
-              <p>
-                <strong>Issuance Date:</strong> {cred.issuanceDate}
-              </p>
-              <p>
-                <strong>Holder ID:</strong> {cred.credentialSubject.id}
-              </p>
-              <p>
-                <strong>Name:</strong> {cred.credentialSubject.name}
-              </p>
-              <p>
-                <strong>Alter:</strong> {cred.credentialSubject.age}
-              </p>
-              <p>
-                <strong>Reg.-Nr.:</strong>{" "}
-                {cred.credentialSubject.registration_number}
-              </p>
-              <p className="truncate">
-                <strong>Proof:</strong>{" "}
-                <span className="text-xs text-gray-600">{cred.proof.jws}</span>
-              </p>
-            </li>
+          {credentials.map((cred) => (
+            <Credential key={cred.id} credential={cred} />
           ))}
         </ul>
       )}

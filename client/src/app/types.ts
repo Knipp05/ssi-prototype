@@ -35,4 +35,10 @@ export type CredentialOffer = {
     schemaType: string;
     issuerId: string;
     sessionId: string;
-  };
+};
+
+export type PresentationRequest = {
+    requestId: string;
+    sessionId: string;
+    requiredSchemaTypes: string[];
+};

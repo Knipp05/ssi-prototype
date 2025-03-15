@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWebSocket } from "../WebSocketContext";
 import QRCode from "react-qr-code";
@@ -8,10 +8,21 @@ import { FRONTEND_URL, BACKEND_URL } from "../../constants";
 
 export default function Home() {
   const router = useRouter();
-  const { sessionId } = useWebSocket(); // 🎯 WebSocket aus Context verwenden
+  const { sessionId, requests, loginError } = useWebSocket(); // 🎯 WebSocket aus Context verwenden
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showSSI, setShowSSI] = useState(false);
+
+  useEffect(() => {
+    if (requests.length === 0) {
+      setShowSSI(false);
+    }
+    if (loginError) {
+      alert(
+        "❌ Beim Login mit SSI ist ein Fehler aufgetreten. Bitte erneut versuchen oder andere Anmeldemethode verwenden!"
+      );
+    }
+  }, [requests, loginError]);
 
   async function handleLogin() {
     const response = await fetch(`${BACKEND_URL}/login`, {
@@ -29,6 +40,21 @@ export default function Home() {
     console.log("🔓 Login erfolgreich!");
     sessionStorage.setItem("authToken", result.jwt);
     router.push("/dashboard");
+  }
+
+  async function handleSSILogin() {
+    setShowSSI(true);
+    const response = await fetch(`${BACKEND_URL}/ssi-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        requiredSchemaType: "EnrollmentCredential",
+      }),
+    });
+    if (!response.ok) {
+      console.error("Fehler bei SSI Login Anfrage");
+    }
   }
 
   return (
@@ -61,7 +87,7 @@ export default function Home() {
             🔑 Anmelden
           </button>
           <button
-            onClick={() => setShowSSI(!showSSI)}
+            onClick={handleSSILogin}
             className="w-full bg-green-500 text-white py-2 rounded-lg shadow-md hover:bg-green-600 transition"
           >
             🆔 Mit SSI anmelden
