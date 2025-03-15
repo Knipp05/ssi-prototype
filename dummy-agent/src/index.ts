@@ -5,8 +5,8 @@ import cors from "cors";
 import { initDB } from "./database.js";
 import { initSchemas, initIssuer, offerCredential, fetchSchemas, acceptCredentialOffer, declineOffer } from "./issuer.js";
 import { BACKEND_URL, PORT } from "./constants.js";
-import { loginUser, verifyPresentation } from "./verifier.js";
-import { Offer } from "./types.js";
+import { declineRequest, loginUser, loginWithSSI, verifyPresentation } from "./verifier.js";
+import { CredentialOffer, PresentationRequest } from "./types.js";
 import { v4 as uuidv4 } from "uuid"
 
 const app = express();
@@ -15,7 +15,8 @@ const wss = new WebSocketServer({ server })
 
 export const activeSessions = new Map<string, WebSocket>();
 export const activeWallets = new Map<string, WebSocket>();
-export const pendingOffers = new Map<string, Offer>();
+export const pendingOffers = new Map<string, CredentialOffer>();
+export const pendingRequests = new Map<string, PresentationRequest>();
 
 export const supportedSchemas = await initSchemas();
 
@@ -46,14 +47,24 @@ app.use(express.json());
                     console.log(`Session ${sessionId} registriert`);
                     ws.send(JSON.stringify({ type: "register-session", sessionId}))
                 } else if (type === "register-wallet" && sessionId) {
+                    if(!activeSessions.get(sessionId)) {
+                        ws.send(JSON.stringify({ type: "register-error" }));
+                        return;
+                    }
                     activeWallets.set(sessionId, ws)
-                    console.log(`Wallet für Identifier ${sessionId} ist aktiv!`)
 
                     const openOffers = Array.from(pendingOffers.values())
                         .filter((offer) => offer.sessionId === sessionId);
 
                     if (openOffers.length > 0) {
                         openOffers.forEach(offer => ws.send(JSON.stringify({ type: "credential-offer", offer})))    
+                    }
+
+                    const openRequests = Array.from(pendingRequests.values())
+                        .filter((request) => request.sessionId === sessionId);
+
+                    if (openRequests.length > 0) {
+                        openRequests.forEach(request => ws.send(JSON.stringify({ type: "presentation-request", request})))    
                     }
                 }
                 
@@ -120,11 +131,15 @@ app.use(express.json());
 
     app.post("/login", (req, res) => loginUser(req, res));
 
+    app.post("/ssi-login", (req, res) => loginWithSSI(req, res))
+
     app.post("/offer-credential", (req, res) => offerCredential(req, res))
 
     app.post("/accept-offer", (req, res) => acceptCredentialOffer(req, res))
 
     app.post("/decline-offer", (req, res) => declineOffer(req, res))
+
+    app.post("/decline-request", (req, res) => declineRequest(req, res))
 
     app.post("/verify-credential", (req, res) => verifyPresentation(req, res))
 

@@ -2,10 +2,12 @@ import { Request, Response, NextFunction } from "express"
 import jwt from "jsonwebtoken"
 import { JWT_SECRET, VDR_URL } from "./constants.js"
 import { openDB } from "./database.js";
+import { v4 as uuidv4 } from "uuid"
 import { compare } from "bcrypt-ts";
 import { issueJWT, validateSchema } from "./issuer.js";
 import { importJWK, jwtVerify } from "jose";
-import { activeSessions } from "./index.js";
+import { activeSessions, pendingRequests } from "./index.js";
+import { PresentationRequest } from "./types.js";
 
 export function authenticateJWT(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers.authorization;
@@ -122,6 +124,28 @@ export async function verifyPresentation (req: Request, res: Response) {
     }
 }
 
+export function declineRequest(req: Request, res: Response) {
+    const { requestId } = req.body;
+    const presentationRequest = pendingRequests.get(requestId)
+    console.log("Request: ", presentationRequest?.requestId)
+    if (!presentationRequest) {
+        res.status(404).json({ message: "Anfrage nicht gefunden" });
+        return;
+    }
+    removeRequest(presentationRequest)
+    res.status(200).json({ message: "Anfrage abgelehnt" });
+}
+
+function removeRequest(request: PresentationRequest) {
+    console.log(request.sessionId)
+    const dashBoardSocket = activeSessions.get(request.sessionId);
+    if (dashBoardSocket) {
+        console.log("Nachricht an Websocket: ", request.sessionId)
+        dashBoardSocket.send(JSON.stringify({ type: "request-deleted", request: request.requestId }));
+    }
+    pendingRequests.delete(request.requestId)
+}
+
 export async function loginUser(req: Request, res: Response) {
     const { username, password } = req.body;
 
@@ -140,4 +164,25 @@ export async function loginUser(req: Request, res: Response) {
     } catch (error) {
         res.status(500).json({ message: "Fehler beim Login" });
     }
+}
+
+export async function loginWithSSI(req: Request, res: Response) {
+    const { sessionId, requiredSchemaType } = req.body;
+
+    if (!sessionId || !requiredSchemaType) {
+        res.status(400).json({ message: "SessionID und Schema Typ erforderlich!" });
+        return;
+    }
+
+    const requestId = uuidv4();
+
+    const request: PresentationRequest = {
+        sessionId,
+        requestId,
+        requiredSchemaTypes: ["VerifiableCredential", requiredSchemaType]
+    }
+
+    pendingRequests.set(requestId, request)
+
+    res.status(201).json({ message: "Anfrage erfolgreich erstellt!" });
 }

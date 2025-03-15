@@ -7,7 +7,7 @@ import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH, JWT_SECRET, FR
 import jwt from "jsonwebtoken"
 import { activeSessions, activeWallets, pendingOffers, supportedSchemas } from "./index.js";
 import { testCertificationSchema } from "./demo_data.js";
-import { Offer } from "./types.js";
+import { CredentialOffer } from "./types.js";
 
 // Web Crypto API für jose setzen
 if (!globalThis.crypto) {
@@ -250,7 +250,7 @@ export async function offerCredential(req: Request, res: Response) {
         offerId = uuidv4();
     }
 
-    const offer: Offer = {
+    const offer: CredentialOffer = {
         offerId,
         schemaId,
         schemaType,
@@ -307,7 +307,7 @@ export function declineOffer(req: Request, res: Response) {
     res.status(200).json({ message: "Offer abgelehnt" });
 }
 
-function removeOffer(offer: Offer) {
+function removeOffer(offer: CredentialOffer) {
     const dashBoardSocket = activeSessions.get(offer.sessionId);
     if (dashBoardSocket) {
         console.log("Nachricht an Websocket: ", offer.sessionId)
@@ -372,7 +372,7 @@ async function issueCredential(holderId: string, schemaId: string) {
         // Credential-Objekt erstellen
         const credential = {
             id: uuidv4(),
-            type: [ "VerifiableCredential", "EnrolmentCredential"],
+            type: [ "VerifiableCredential", "EnrollmentCredential"],
             issuer: `/issuer/${ISSUER_UUID}`,
             issuanceDate: new Date().toISOString(),
             credentialSubject: demoCredentialSubject,
