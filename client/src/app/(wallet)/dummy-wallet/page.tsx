@@ -2,9 +2,10 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { BACKEND_URL, VDR_URL } from "../../constants";
+import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "../../constants";
 import { CredentialOffer, PresentationRequest, TempVP, VC } from "../../types";
 import Credential from "./Credential";
+import Link from "next/link";
 
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
@@ -25,45 +26,46 @@ export default function DummyWallet() {
     useState<PresentationRequest | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [credentials, setCredentials] = useState<VC<Record<string, any>>[]>([]);
+  const [isCryptoSupported, setIsCryptoSupported] = useState(true);
 
   // **Prüft, ob ein Identifier existiert oder erzeugt einen neuen**
   useEffect(() => {
     async function checkOrCreateIdentifier() {
-      const storedId = localStorage.getItem(STORAGE_KEY);
-      const identifierData = await createUserIdentifier();
-
-      if (!identifierData) {
-        alert("WebCrypto API funktioniert nur unter localhost oder https!");
+      if (!window.crypto?.subtle) {
         return;
       }
 
-      if (!storedId) {
-        console.log("🔹 Kein Identifier gefunden, erzeuge neuen...");
-        const { userId, publicJWK } = identifierData;
+      const storedId = localStorage.getItem(STORAGE_KEY);
 
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ id: userId, publicKey: publicJWK })
-        );
-        setIdentifier(userId);
-
-        await registerUserWithVDR(userId, publicJWK);
-      } else {
+      if (storedId && localStorage.getItem("dummyWalletPrivateKey")) {
         const storedData = JSON.parse(storedId);
+        console.log("Identifier und Schlüsselpaar existieren bereits!");
         console.log("✅ Identifier gefunden:", storedData.id);
         setIdentifier(storedData.id);
         await registerUserWithVDR(storedData.id, storedData.publicKey);
+        return;
       }
+
+      console.log("🔹 Kein Identifier gefunden, erzeuge neuen...");
+      const { userId, publicJWK } = await createUserIdentifier();
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ id: userId, publicKey: publicJWK })
+      );
+      setIdentifier(userId);
+
+      await registerUserWithVDR(userId, publicJWK);
     }
 
     checkOrCreateIdentifier();
   }, []);
 
   useEffect(() => {
-    if (presentationRequests.length > 0) {
-      setActivePresentationRequest(presentationRequests[0]);
+    if (!window.crypto?.subtle) {
+      setIsCryptoSupported(false);
     }
-  }, [presentationRequests]);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -110,12 +112,6 @@ export default function DummyWallet() {
   }, []);
 
   async function createUserIdentifier() {
-    if (!window.crypto?.subtle) {
-      alert(
-        "WebCrypto API wird derzeit nicht unterstützt. Bitte rufe die Seite über localhost oder https auf!"
-      );
-      return;
-    }
     const userId = uuidv4();
     const keyPair = await window.crypto.subtle.generateKey(
       {
@@ -237,7 +233,7 @@ export default function DummyWallet() {
 
   async function createVerifiablePresentation<T>(credential: VC<T>) {
     if (!identifier) {
-      alert("Kein Identifier gefunden.");
+      alert("❌ Kein Identifier gefunden.");
       return;
     }
 
@@ -246,7 +242,7 @@ export default function DummyWallet() {
     );
 
     if (!privateKeyJWK.kty) {
-      alert("Privater Schlüssel nicht gefunden!");
+      alert("❌ Privater Schlüssel nicht gefunden!");
       return;
     }
 
@@ -266,10 +262,21 @@ export default function DummyWallet() {
       body: JSON.stringify({ sessionId: sessionId, vp: signedVP }),
     });
 
+    const responseData = await response.json();
+
     if (!response.ok) {
-      alert("❌ Fehler bei der Übertragung.");
+      alert(responseData.message);
     } else {
-      alert("Verifikation erfolgreich!");
+      alert("✔️ Verifikation erfolgreich!");
+      setPresentationRequests((oldPresentationRequests) =>
+        oldPresentationRequests.filter(
+          (requestElement) =>
+            requestElement.requestId !== activePresentationRequest?.requestId
+        )
+      );
+      setActivePresentationRequest(
+        presentationRequests.length > 0 ? presentationRequests[0] : null
+      );
     }
   }
 
@@ -378,13 +385,15 @@ export default function DummyWallet() {
     }
   }
 
-  function clearData() {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
-    localStorage.removeItem("dummyWalletPrivateKey");
-    setIdentifier("");
-    setCredentials([]);
-    alert("🗑 Alle gespeicherten Daten wurden gelöscht.");
+  function clearData(deletedElement: string) {
+    if (deletedElement === "identifier") {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("dummyWalletPrivateKey");
+      setIdentifier("");
+    } else if (deletedElement === "credentials") {
+      localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+      setCredentials([]);
+    }
   }
 
   return (
@@ -392,6 +401,32 @@ export default function DummyWallet() {
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-4">
         Dummy Wallet
       </h1>
+      {!isCryptoSupported && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md">
+          <p className="font-semibold">
+            ❌ WebCrypto API wird nicht unterstützt!
+          </p>
+          <p>
+            Diese Wallet kann nur via{" "}
+            <strong>
+              <u>
+                <Link href={`http://localhost:${PORT}/dummy-wallet`}>
+                  localhost
+                </Link>
+              </u>
+            </strong>{" "}
+            oder über{" "}
+            <strong>
+              <u>
+                <Link href={`${FRONTEND_URL}/dummy-wallet`}>https</Link>
+              </u>
+            </strong>{" "}
+            geöffnet werden. Ansonsten ist die WebCrypto API deaktiviert. Öffne
+            die Wallet daher nur auf demselben Gerät wie die restliche Anwendung
+            oder nutze ngrok, um einen https Tunnel zu erstellen.
+          </p>
+        </div>
+      )}
       {!sessionId && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-md">
           <p className="font-semibold">⚠ Keine gültige Session gefunden!</p>
@@ -482,9 +517,6 @@ export default function DummyWallet() {
             onClick={async () => {
               const identifierData = await createUserIdentifier();
               if (!identifierData) {
-                alert(
-                  "WebCrypto API funktioniert nur unter localhost oder https!"
-                );
                 return;
               }
               const { userId, publicJWK } = identifierData;
@@ -506,7 +538,7 @@ export default function DummyWallet() {
 
       <h2 className="text-xl font-semibold mb-3">📜 Meine Credentials</h2>
 
-      {activePresentationRequest ? (
+      {activePresentationRequest && presentationRequests.length > 0 ? (
         credentials.length === 0 ? (
           <p className="text-gray-500">Keine Credentials gespeichert.</p>
         ) : (
@@ -537,10 +569,16 @@ export default function DummyWallet() {
 
       <div className="mt-6 flex gap-4">
         <button
-          onClick={clearData}
+          onClick={() => clearData("identifier")}
           className="px-4 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 transition"
         >
-          🗑 Identifier & Daten löschen
+          🗑 Identifier löschen
+        </button>
+        <button
+          onClick={() => clearData("credentials")}
+          className="px-4 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 transition"
+        >
+          🗑 Credentials löschen
         </button>
       </div>
     </div>

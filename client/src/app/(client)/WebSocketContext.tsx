@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { BACKEND_URL } from "../constants";
 import { CredentialOffer, PresentationRequest } from "../types";
+import { useRouter } from "next/navigation";
 
 const WebSocketContext = createContext<{
   offers: CredentialOffer[];
@@ -11,6 +12,7 @@ const WebSocketContext = createContext<{
 }>({ offers: [], requests: [], sessionId: "", loginError: false });
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [offers, setOffers] = useState<CredentialOffer[]>([]);
   const [requests, setRequests] = useState<PresentationRequest[]>([]);
   const [sessionId, setSessionId] = useState<string>("");
@@ -37,6 +39,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
         if (message.type === "register-session") {
           setSessionId(message.sessionId);
+        }
+
+        if (message.type === "verification-success") {
+          sessionStorage.setItem("authToken", message.jwt);
+          router.push("/dashboard");
         }
 
         if (message.type === "offer-deleted") {
@@ -74,7 +81,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       wsRef.current?.close();
     };
-  }, []);
+  }, [router]);
 
   return (
     <WebSocketContext.Provider
