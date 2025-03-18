@@ -67,9 +67,10 @@ app.post("/register-identifier", async (req, res) => {
 // Öffentlichen Schlüssel für eine ID abrufen
 app.get("/issuer/:id", async (req, res) => {
     const { id } = req.params;
+    const decodedId = decodeURIComponent(id)
     console.log("Anfrage zu Issuer: ", id)
     const db = await openDB();
-    const result = await db.get("SELECT publicKey FROM identifiers WHERE id = ?", [id]);
+    const result = await db.get("SELECT publicKey FROM identifiers WHERE id = ?", [decodedId]);
     console.log(result)
 
     if (result) {

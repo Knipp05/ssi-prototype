@@ -17,7 +17,7 @@ if (!globalThis.crypto) {
 
 async function checkIfIssuerRegistered(): Promise<boolean> {
     try {
-        const response = await fetch(`${VDR_URL}/issuer/${ISSUER_UUID}`, {
+        const response = await fetch(`${VDR_URL}/issuer/${encodeURIComponent(ISSUER_UUID)}`, {
             method: "GET",
             headers: {
               "ngrok-skip-browser-warning": "true",

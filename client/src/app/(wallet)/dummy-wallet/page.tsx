@@ -112,7 +112,7 @@ export default function DummyWallet() {
   }, []);
 
   async function createUserIdentifier() {
-    const userId = uuidv4();
+    const userId = `did:example:${uuidv4()}`;
     const keyPair = await window.crypto.subtle.generateKey(
       {
         name: "RSASSA-PKCS1-v1_5",
