@@ -188,7 +188,7 @@ export default function Dashboard() {
               {/* QR-Code mit Fade-in Effekt */}
               {qrData["ExmatriculationCredential"] && (
                 <div className="mt-4 flex flex-col items-center justify-center">
-                  <QRCode value={qrData["ExmatriculationCredentialSchema"]} />
+                  <QRCode value={qrData["ExmatriculationCredential"]} />
                   <p className="text-xs text-gray-500 mt-2 text-center">
                     Scanne den QR-Code mit deiner Wallet.
                   </p>

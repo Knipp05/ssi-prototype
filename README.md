@@ -1,6 +1,6 @@
 # SSI Prototype
 
-Dieses Projekt ist ein **SSI (Self-Sovereign Identity) Prototype**, der die grundlegenden Konzepte von Verifiable Credentials demonstriert. Die Anwendung besteht aus einem **Frontend (Next.js)**, einem **Backend (Express.js)** und einem **VDR (Verifiable Data Registry)**.
+Dieses Projekt ist ein **SSI (Self-Sovereign Identity) Prototype**, der die grundlegenden Konzepte von Verifiable Credentials demonstriert. Die Anwendung besteht aus einem **Frontend (Next.js) mit integrierter dummy Wallet**, einem **Backend (Express.js)** und einem **dummy VDR (Verifiable Data Registry) (Express.js)**.
 
 ## 📌 Funktionen
 
@@ -9,6 +9,7 @@ Dieses Projekt ist ein **SSI (Self-Sovereign Identity) Prototype**, der die grun
 - **QR-Code** für den Credential-Austausch mit einer Wallet
 - **WebSocket-Verbindung** für den Credential-Transfer
 - **JWT-Authentifizierung** mit Middleware-Schutz
+- **ngrok-Tunneling** für https Verbindungen
 - **Docker-Setup** für einfaches Deployment
 
 ## 🏗️ Installation & Setup
@@ -17,12 +18,12 @@ Dieses Projekt ist ein **SSI (Self-Sovereign Identity) Prototype**, der die grun
 
 - Node.js (>= 18)
 - Docker & Docker Compose
-- Ngrok (falls erforderlich)
+- Ngrok (falls Wallet auf externen Geräten (z.B. Smartphone) verwendet werden soll)
 
 ### 2️⃣ Projekt klonen
 
 ```sh
-git clone https://github.com/dein-repo/ssi-prototype.git
+git clone https://https://github.com/Knipp05/ssi-prototype.git
 cd ssi-prototype
 ```
 
@@ -30,8 +31,8 @@ cd ssi-prototype
 
 ```sh
 cd client && npm install
-cd ../server && npm install
-cd ../vdr && npm install
+cd ../dummy-agent && npm install
+cd ../dummy-vdr && npm install
 ```
 
 ### 4️⃣ .env Datei erstellen
@@ -40,12 +41,6 @@ Kopiere die Beispieldatei und passe die Werte an:
 
 ```sh
 cp .env.example .env
-```
-
-Falls **ngrok** genutzt werden soll, kann das Skript die URLs automatisch setzen:
-
-```sh
-node scripts/setup-ngrok.js
 ```
 
 Falls **kein ngrok** genutzt wird, werden **localhost-Adressen** verwendet.
@@ -61,17 +56,22 @@ docker-compose up --build
 #### Ohne Docker
 
 ```sh
-# VDR starten
-cd vdr && npm start
-
-# Backend starten
-cd ../server && npm start
-
-# Frontend starten
-cd ../client && npm run dev
+# URL in .env setzen und ggf. ngrok starten
+node update-env.js
 ```
 
-Die Anwendung ist dann unter `http://localhost:3000` erreichbar.
+```sh
+# VDR starten
+cd dummy-vdr && npm run build && npm start
+
+# Backend starten
+cd ../dummy-agent && npm run build && npm start
+
+# Frontend starten
+cd ../client && npm run build && npm start
+```
+
+Die Anwendung ist dann unter einer dynamischen ngrok-URL oder `http://localhost:3000` erreichbar.
 
 ## 📡 API Endpunkte
 

@@ -6,11 +6,20 @@ import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "../../constants";
 import { CredentialOffer, PresentationRequest, TempVP, VC } from "../../types";
 import Credential from "./Credential";
 import Link from "next/link";
+import { Suspense } from "react";
 
 const STORAGE_KEY = "dummyWalletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
 
-export default function DummyWallet() {
+export default function DummyWalletWrapper() {
+  return (
+    <Suspense fallback={<div>Laden ...</div>}>
+      <DummyWallet />
+    </Suspense>
+  );
+}
+
+function DummyWallet() {
   const searchParams = useSearchParams();
   const [sessionId, setSessionId] = useState<string | null>(
     searchParams.get("sessionId")
@@ -32,6 +41,7 @@ export default function DummyWallet() {
   useEffect(() => {
     async function checkOrCreateIdentifier() {
       if (!window.crypto?.subtle) {
+        setIsCryptoSupported(false);
         return;
       }
 
@@ -59,12 +69,6 @@ export default function DummyWallet() {
     }
 
     checkOrCreateIdentifier();
-  }, []);
-
-  useEffect(() => {
-    if (!window.crypto?.subtle) {
-      setIsCryptoSupported(false);
-    }
   }, []);
 
   useEffect(() => {

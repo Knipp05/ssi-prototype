@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node dist/src/index.js",
-    "build": "tsc",
-    "dev": "ts-node-esm index.ts"
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",
