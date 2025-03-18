@@ -33,7 +33,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         );
       };
 
-      wsRef.current.onmessage = (event) => {
+      wsRef.current.onmessage = async (event) => {
         const message = JSON.parse(event.data);
         console.log("📩 Nachricht vom Server:", message);
 
@@ -42,7 +42,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (message.type === "verification-success") {
-          sessionStorage.setItem("authToken", message.jwt);
+          localStorage.setItem("user", message.user);
+          localStorage.setItem("authToken", message.jwt);
           router.push("/dashboard");
         }
 
@@ -68,7 +69,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
       wsRef.current.onclose = () => {
         console.log("⚠️ WebSocket getrennt. Versuche Reconnect...");
-        setTimeout(() => connectWebSocket(), 1000);
+        setTimeout(() => connectWebSocket(), 10000);
       };
 
       wsRef.current.onerror = (error) => {

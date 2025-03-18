@@ -2,6 +2,7 @@ import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
 import path from "path";
 import { hash } from "bcrypt-ts";
+import { students, studentsLogin } from "./demo_data.js";
 
 
 const SALT_ROUNDS = 10;
@@ -19,24 +20,40 @@ export async function initDB(): Promise<void> {
     const db = await openDB();
 
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
+        CREATE TABLE IF NOT EXISTS students (
+        registration_number INTEGER PRIMARY KEY,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        birth_date TEXT NOT NULL,
+        birth_place TEXT NOT NULL,
+        enrollment_date TEXT NOT NULL,
+        study_course TEXT NOT NULL,
+        study_degree TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS studentLogin (
+            registration_number INTEGER PRIMARY KEY,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            FOREIGN KEY (registration_number) REFERENCES students(registration_number) ON DELETE CASCADE
         );
     `);
 
-    const users = [
-        { username: "nknipper", password: "pass123"},
-        { username: "tuser", password: "test123"}
-    ];
+    for (const student of students) {
+        console.log(student.enrollmentDate)
+        const existingStudent = await db.get("SELECT * FROM students WHERE registration_number = ?", [student.registrationNumber])
 
-    for (const user of users) {
-        const existingUser = await db.get("SELECT * FROM users WHERE username = ?", [user.username])
+        if (!existingStudent) {
+            await db.run("INSERT OR IGNORE INTO students (registration_number, first_name, last_name, birth_date, birth_place, enrollment_date, study_course, study_degree) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [student.registrationNumber, student.firstName, student.lastName, student.birthDate.toISOString(), student.birthPlace, student.enrollmentDate.toISOString(), student.studyCourse, student.studyDegree])
+        }
+    }
 
-        if (!existingUser) {
-            const hashedPassword = await hash(user.password, SALT_ROUNDS)
-            await db.run("INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)", [user.username, hashedPassword])
+    for (const student of studentsLogin) {
+        const existingStudent = await db.get("SELECT * FROM studentLogin WHERE registration_number = ?", [student.registrationNumber])
+
+        if (!existingStudent) {
+            const hashedPassword = await hash(student.password, SALT_ROUNDS)
+            await db.run("INSERT OR IGNORE INTO studentLogin (registration_number, username, password) VALUES (?, ?, ?)", [student.registrationNumber, student.username, hashedPassword])
         }
     }
 

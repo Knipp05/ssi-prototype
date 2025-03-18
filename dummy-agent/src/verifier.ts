@@ -6,10 +6,10 @@ import { v4 as uuidv4 } from "uuid"
 import { compare } from "bcrypt-ts";
 import { issueJWT, validateSchema } from "./issuer.js";
 import { importJWK, jwtVerify } from "jose";
-import { activeSessions, pendingRequests } from "./index.js";
+import { activeSessions, activeUsers, pendingRequests } from "./index.js";
 import { PresentationRequest } from "./types.js";
 
-export function authenticateJWT(req: Request, res: Response, next: NextFunction) {
+export function authenticateJWT(req: Request, res: Response) {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -22,7 +22,8 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         (req as any).user = decoded;
-        next();
+        res.status(200).json({ isValid: true });
+        return;
     } catch (error) {
         res.status(403).json({ message: "Ungültiges Token" })
         return;
@@ -107,9 +108,24 @@ export async function verifyPresentation (req: Request, res: Response) {
         const userId = vp.verifiableCredential[0].credentialSubject.id;
         const token = issueJWT(userId)
 
+        const db = await openDB();
+        if (!db) {
+            console.error("❌ Fehler: Datenbankverbindung fehlgeschlagen!");
+            res.status(400).json({ message: "Fehler beim Öffnen der Datenbank!" })
+            return;
+        }
+        console.log("✅ Datenbankverbindung erfolgreich!");
+
+        const studentName = await db.get("SELECT username FROM studentLogin WHERE registration_number = ?", [vp.verifiableCredential[0].credentialSubject.registration_number])
+
+        if(!studentName) {
+            res.status(404).json({ message: "Student nicht gefunden!" })
+            return;
+        }
+
         if (activeSessions.has(sessionId)) {
             const ws = activeSessions.get(sessionId);
-            ws?.send(JSON.stringify({ type: "verification-success", jwt: token }))
+            ws?.send(JSON.stringify({ type: "verification-success", jwt: token, user: studentName.username}))
             console.log(`Erfolg an Session ${sessionId} gesendet!`);
         } else {
             console.warn("Keine aktive WebSocket-Verbindung für diese Session ID gefunden!");
@@ -147,19 +163,20 @@ function removeRequest(request: PresentationRequest) {
 }
 
 export async function loginUser(req: Request, res: Response) {
-    const { username, password } = req.body;
+    const { username, password, sessionId } = req.body;
 
     try {
         const db = await openDB();
-        const user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
+        const user = await db.get("SELECT * FROM studentLogin WHERE username = ?", [username]);
 
         if (!user || !(await compare(password, user.password))) {
             res.status(401).json({ message: "Ungültige Anmeldedaten" });
             return;
         }
 
-        const token = issueJWT(user.id)
-        res.status(200).json({ jwt: token })
+        const token = issueJWT(user.registration_number)
+        activeUsers.set(sessionId, user.registration_number)
+        res.status(200).json({ jwt: token, username })
         return;
     } catch (error) {
         res.status(500).json({ message: "Fehler beim Login" });

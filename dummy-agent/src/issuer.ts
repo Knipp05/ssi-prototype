@@ -5,9 +5,10 @@ import * as crypto from "node:crypto";
 import fs from "fs";
 import { VDR_URL, ISSUER_UUID, PUBLIC_KEY_PATH, PRIVATE_KEY_PATH, JWT_SECRET, FRONTEND_URL } from "./constants.js";
 import jwt from "jsonwebtoken"
-import { activeSessions, activeWallets, pendingOffers, supportedSchemas } from "./index.js";
-import { testCertificationSchema } from "./demo_data.js";
+import { activeSessions, activeUsers, activeWallets, pendingOffers, supportedSchemas } from "./index.js";
+import { supportedCredentials } from "./demo_data.js";
 import { CredentialOffer } from "./types.js";
+import { openDB } from "./database.js";
 
 // Web Crypto API für jose setzen
 if (!globalThis.crypto) {
@@ -125,34 +126,37 @@ export async function initIssuer(): Promise<void> {
     }
 }
 
-export async function initSchemas(): Promise<Map<string, string>> {
+export async function initSupportedSchemas(): Promise<Map<string, string>> {
     console.log("🔍 Prüfe, ob alle notwendigen Schemata registriert sind...");
     const supportedSchemas = new Map<string, string>();
 
-    const requiredSchemas = {
-        EnrollmentCredential: testCertificationSchema
-    };
-
-    for (const [type, schemaDefinition] of Object.entries(requiredSchemas)) {
+    for (const [type, schemaDefinition] of Object.entries(supportedCredentials)) {
         const schemaHash = generateSchemaHash(schemaDefinition);
         const existingSchemaId = await checkIfSchemaExists(schemaHash);
 
         if (existingSchemaId) {
             console.log(`✅ Schema ${type} existiert bereits mit ID: ${existingSchemaId}`);
-            supportedSchemas.set(type, existingSchemaId)
+            supportedSchemas.set(existingSchemaId, type)
         } else {
             console.log(`⚠️ Schema ${type} nicht gefunden. Registriere neu...`);
             const newSchemaId = await createSchema(schemaDefinition);
             console.log(`📌 Neues Schema ${type} registriert mit ID: ${newSchemaId}`);
-            supportedSchemas.set(type, newSchemaId)
+            supportedSchemas.set(newSchemaId, type)
         }
     }
     return supportedSchemas
 }
 
 export async function fetchSchemas(req: Request, res: Response) {
-    const schemas = Object.fromEntries(supportedSchemas);
-    res.status(200).json({ schemas })
+    const schemas = new Map<string, string>();
+    console.log(supportedSchemas)
+    for (const [key, value] of supportedSchemas.entries()) {
+        schemas.set(value, key);
+    }
+
+    const schemasObject = Object.fromEntries(schemas)
+
+    res.status(200).json({ schemas: schemasObject })
 }
 
 
@@ -239,7 +243,7 @@ export function issueJWT(userId: string) {
 export async function offerCredential(req: Request, res: Response) {
     const { sessionId, schemaId, schemaType } = req.body;
     if (!sessionId || !schemaId) {
-        res.status(400).json({ message: "Session ID und Schema ID erforderlich" });
+        res.status(400).json({ message: "Session ID und Schema ID  erforderlich" });
         return;
     }
 
@@ -291,9 +295,22 @@ export async function acceptCredentialOffer(req: Request, res: Response) {
         return;
     }
 
-    const credential = await issueCredential(holderId, credentialOffer.schemaId);
-    removeOffer(credentialOffer)
-    res.status(200).json({ credential })
+    const registrationNumber = activeUsers.get(credentialOffer.sessionId)
+    if (!registrationNumber) {
+        console.log("Benutzer nicht gefunden!")
+        res.status(404).json({ message: "Benutzer nicht gefunden!" });
+        return;
+    }
+
+    const credential = await issueCredential(holderId, credentialOffer.schemaId, registrationNumber);
+    if (credential.error) {
+        console.log(credential.error)
+        removeOffer(credentialOffer)
+        res.status(400).json({ error: credential.error })
+    } else {
+        removeOffer(credentialOffer)
+        res.status(200).json({ credential })
+    }
 }
 
 export function declineOffer(req: Request, res: Response) {
@@ -316,7 +333,7 @@ function removeOffer(offer: CredentialOffer) {
     pendingOffers.delete(offer.offerId)
 }
 
-async function issueCredential(holderId: string, schemaId: string) {
+async function issueCredential(holderId: string, schemaId: string, registrationNumber: number) {
     console.log("Anfrage zur Ausstellung von: ", holderId)
 
     try {
@@ -336,14 +353,6 @@ async function issueCredential(holderId: string, schemaId: string) {
             return { error: "Benutzer-Identifier nicht gefunden" };
         }
 
-        console.log("Schema ID: ", schemaId)
-        const demoCredentialSubject = { // später durch dynamische Daten ersetzen!
-            id: holderId,
-            name: "Niklas",
-            age: 24,
-            registration_number: 82419
-        }
-
         // Prüfen, ob das Schema existiert
         const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`, {
             method: "GET",
@@ -358,8 +367,57 @@ async function issueCredential(holderId: string, schemaId: string) {
         }
         const schemaData = await schemaResponse.json();
         console.log("Schemadaten: ", schemaData)
+        const schemaType = supportedSchemas.get(schemaId)
 
-        if (!validateSchema(demoCredentialSubject, schemaData.schema)) {
+        if(!schemaType) {
+            return { error: "Schema Typ nicht gefunden" };
+        }
+
+        const db = await openDB();
+        if (!db) {
+            console.error("❌ Fehler: Datenbankverbindung fehlgeschlagen!");
+            return { error: "Datenbankverbindung fehlgeschlagen!" };
+        }
+        console.log("✅ Datenbankverbindung erfolgreich!");
+
+        const student = await db.get("SELECT * FROM students WHERE registration_number = ?", [registrationNumber])
+
+        if(!student) {
+            return { error: "Student nicht gefunden!" }
+        }
+
+        const data = await getStudentDataForSchema(registrationNumber, schemaId, db)
+        if (!data) {
+            return { error: "Fehler beim Laden der Studentendaten!" }
+        }
+
+        const { issuanceDate, expiryDate } = getSemesterValidityDates()
+        console.log(data.enrollment_date)
+        const universitySemester = calculateUniversitySemester(data.enrollment_date)
+  
+        let credentialSubject;
+        schemaType === "EnrollmentCredential" ?
+        credentialSubject = {
+            ...data,
+            birth_date: formatDate(new Date(data.birth_date)),
+            enrollment_date: formatDate(new Date(data.enrollment_date)),
+            id: holderId,
+            university_semester: universitySemester,
+            issuance_date: formatDate(issuanceDate),
+            expiry_date: formatDate(expiryDate)
+        } : credentialSubject = {
+            ...data,
+            birth_date: formatDate(new Date(data.birth_date)),
+            enrollment_date: formatDate(new Date(data.enrollment_date)),
+            id: holderId,
+            total_semesters: universitySemester,
+            issuance_date: formatDate(issuanceDate),
+            exmatriculation_date: formatDate(expiryDate)
+        } ;
+
+        console.log("CredentialSubject:", credentialSubject)
+
+        if (!validateSchema(credentialSubject, schemaData.schema)) {
             return { error: "Daten entsprechen nicht dem Schema"};
         }
 
@@ -372,10 +430,10 @@ async function issueCredential(holderId: string, schemaId: string) {
         // Credential-Objekt erstellen
         const credential = {
             id: uuidv4(),
-            type: [ "VerifiableCredential", "EnrollmentCredential"],
+            type: [ "VerifiableCredential", schemaType],
             issuer: `/issuer/${ISSUER_UUID}`,
             issuanceDate: new Date().toISOString(),
-            credentialSubject: demoCredentialSubject,
+            credentialSubject: credentialSubject,
             credentialSchema: {
                 id: `/schema/${schemaId}`,
             }
@@ -404,3 +462,101 @@ async function issueCredential(holderId: string, schemaId: string) {
         return { error: "Fehler bei der Credential-Ausstellung" };
     }
 }
+
+function formatDate(date: Date): string {
+    return date.toLocaleDateString("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+    })
+}
+
+async function getStudentDataForSchema(registrationNumber: number, schemaId: string, db: any) {
+    const schemaType = supportedSchemas.get(schemaId);
+    if (!schemaType) return null;
+
+    const schema = supportedCredentials[schemaType];
+    console.log("Schemadaten:", schema);
+
+    // Liste der berechneten Felder
+    const computedFields = schemaType === "EnrollmentCredential" ? new Set(["id", "issuance_date", "expiry_date", "university_semester"]) : new Set(["id", "total_semesters", "exmatriculation_date", "issuance_date"]);
+
+    // Extrahiere nur die Felder, die in der DB gespeichert sind
+    const dbFields = Object.keys(schema).filter(field => !computedFields.has(field));
+    console.log("Felder aus DB:", dbFields);
+
+    if (dbFields.length === 0) {
+        return null;
+    }
+
+    // Dynamische SQL-Abfrage
+    const query = `SELECT ${dbFields.join(", ")} FROM students WHERE registration_number = ?`;
+
+    // Datenbank-Abfrage
+    console.log("🚀 Starte Datenbankabfrage...");
+const studentData = await db.get(query, [registrationNumber]);
+console.log("✅ Student gefunden:", studentData);
+
+
+    if (!studentData) return null;
+
+    return studentData;
+}
+
+
+  function getSemesterValidityDates() {
+    const today = new Date();
+    const year = today.getFullYear();
+  
+    let issuanceDate, expiryDate;
+  
+    if (today.getMonth() >= 9) {
+        // Zeitraum: 1. Oktober – 31. Dezember
+        issuanceDate = new Date(year, 9, 1);  // 1. Oktober
+        expiryDate = new Date(year + 1, 2, 31); // 31. März des nächsten Jahres
+    } else if (today.getMonth() < 3) {
+        // Zeitraum: 1. Januar - 31. März
+        issuanceDate = new Date(year - 1, 9, 1);
+        expiryDate = new Date(year, 2, 31)
+    } else {
+        // Zeitraum: 1. April – 30. September
+        issuanceDate = new Date(year, 3, 1);  // 1. April
+        expiryDate = new Date(year, 8, 30);   // 30. September
+    }
+  
+    return {
+      issuanceDate: issuanceDate, // YYYY-MM-DD
+      expiryDate: expiryDate // YYYY-MM-DD
+    };
+  }
+
+  function calculateUniversitySemester(enrollmentDate: string): number {
+
+    const enrollment = new Date(enrollmentDate)
+
+    const today = new Date();
+
+    if (enrollment > today) {
+        console.error("❌ Fehler: Einschreibedatum liegt in der Zukunft!", enrollmentDate);
+        return 0;
+    }
+
+    let semesterCount = 0;
+    let currentSemesterStart = enrollment;
+    let nextSemesterStart: Date = currentSemesterStart.getMonth() < 3 ? new Date(Date.UTC(currentSemesterStart.getFullYear(), 9, 1)) : new Date(Date.UTC(currentSemesterStart.getFullYear() + 1, 3, 1));
+    while (currentSemesterStart < today) {
+        semesterCount++;
+        currentSemesterStart = new Date(nextSemesterStart);
+        if (currentSemesterStart.getMonth() < 4) {
+            nextSemesterStart = new Date(Date.UTC(currentSemesterStart.getFullYear(), 9, 1));
+        } else {
+            nextSemesterStart = new Date(Date.UTC(currentSemesterStart.getFullYear() + 1, 3, 1));
+        }
+    }
+
+    return semesterCount;
+}
+
+
+  
+  

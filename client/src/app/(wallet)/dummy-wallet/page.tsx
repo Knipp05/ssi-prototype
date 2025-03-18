@@ -232,6 +232,10 @@ export default function DummyWallet() {
   }
 
   async function createVerifiablePresentation<T>(credential: VC<T>) {
+    if (
+      activePresentationRequest?.requiredSchemaTypes[1] !== credential.type[1]
+    )
+      return;
     if (!identifier) {
       alert("❌ Kein Identifier gefunden.");
       return;
@@ -553,7 +557,8 @@ export default function DummyWallet() {
                   : "cursor-not-allowed opacity-50"
               }`}
             >
-              <Credential credential={cred} />
+              <Credential credential={cred} />{" "}
+              {/* Hier unbeding dynamische Darstellung der Credential Daten machen!!!! */}
             </div>
           ))
         )

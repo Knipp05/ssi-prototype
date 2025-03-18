@@ -28,7 +28,7 @@ export default function Home() {
     const response = await fetch(`${BACKEND_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, sessionId }),
     });
 
     if (!response.ok) {
@@ -38,7 +38,8 @@ export default function Home() {
 
     const result = await response.json();
     console.log("🔓 Login erfolgreich!");
-    sessionStorage.setItem("authToken", result.jwt);
+    localStorage.setItem("user", result.username);
+    localStorage.setItem("authToken", result.jwt);
     router.push("/dashboard");
   }
 
