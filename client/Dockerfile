@@ -1,0 +1,22 @@
+# Basis-Image für Node.js
+FROM node:18
+
+# Setze das Arbeitsverzeichnis
+WORKDIR /app
+
+# Kopiere package.json
+COPY package.json .
+
+# Installiere Abhängigkeiten
+RUN npm install
+
+# Kopiere den gesamten Code
+COPY . ./
+
+EXPOSE 3000
+
+# Baue die Next.js Anwendung
+RUN npm run build
+
+# Starte die Next.js Anwendung
+CMD ["npm", "start"]

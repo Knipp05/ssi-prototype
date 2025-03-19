@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  frontend:
+    build: ./client
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:5000
+      - NEXT_PUBLIC_VDR_URL=http://vdr:7000
+    depends_on:
+      - backend
+
+  backend:
+    build: ./dummy-agent
+    ports:
+      - "3001:3001"
+    environment:
+      - VDR_URL=http://vdr:7000
+    depends_on:
+      - vdr
+
+  vdr:
+    build: ./dummy-vdr
+    ports:
+      - "3002:3002"

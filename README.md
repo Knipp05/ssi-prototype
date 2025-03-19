@@ -85,16 +85,6 @@ Die Anwendung ist dann unter einer dynamischen ngrok-URL oder `http://localhost:
 - `POST /issue-credential` → Ausstellung eines Credentials
 - `POST /verify-credential` → Überprüfung eines Credentials
 
-## 🚀 Deployment
-
-Für ein Live-Deployment kann z. B. **Vercel** (Frontend) und **Railway/Fly.io** (Backend) genutzt werden.
-
-## 🛠️ Entwicklung & Debugging
-
-- `.env` Datei für Konfigurationswerte anpassen
-- Logs in **Docker-Containern** ansehen: `docker logs -f container_name`
-- WebSocket-Kommunikation debuggen mit **Browser DevTools**
-
 ## 📜 Lizenz
 
 Dieses Projekt steht unter der **MIT-Lizenz**.
