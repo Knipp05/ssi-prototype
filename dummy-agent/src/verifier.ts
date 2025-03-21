@@ -1,10 +1,10 @@
-import { Request, Response, NextFunction } from "express"
+import { Request, Response } from "express"
 import jwt from "jsonwebtoken"
 import { JWT_SECRET, VDR_URL } from "./constants.js"
 import { openDB } from "./database.js";
 import { v4 as uuidv4 } from "uuid"
 import { compare } from "bcrypt-ts";
-import { issueJWT, validateSchema } from "./issuer.js";
+import { issueJWT } from "./issuer.js";
 import { importJWK, jwtVerify } from "jose";
 import { activeSessions, activeUsers, pendingRequests } from "./index.js";
 import { PresentationRequest } from "./types.js";
@@ -152,16 +152,6 @@ export function declineRequest(req: Request, res: Response) {
     res.status(200).json({ message: "Anfrage abgelehnt" });
 }
 
-function removeRequest(request: PresentationRequest) {
-    console.log(request.sessionId)
-    const dashBoardSocket = activeSessions.get(request.sessionId);
-    if (dashBoardSocket) {
-        console.log("Nachricht an Websocket: ", request.sessionId)
-        dashBoardSocket.send(JSON.stringify({ type: "request-deleted", request: request.requestId }));
-    }
-    pendingRequests.delete(request.requestId)
-}
-
 export async function loginUser(req: Request, res: Response) {
     const { username, password, sessionId } = req.body;
 
@@ -202,4 +192,49 @@ export async function loginWithSSI(req: Request, res: Response) {
     pendingRequests.set(requestId, request)
 
     res.status(201).json({ message: "Anfrage erfolgreich erstellt!" });
+}
+
+export function validateSchema(data: object, schema: any): boolean {
+    console.log("Eingehende Daten:", data);
+    console.log("Erwartetes Schema:", schema);
+
+    // Prüfen, ob die Feldnamen und Typen korrekt sind
+    for (const key of Object.keys(schema)) {
+        console.log(`Prüfe, ob ${key} in den Daten vorhanden ist`);
+
+        if (!(key in data)) {
+            console.error(`Fehlendes Feld: ${key}`);
+            return false;
+        }
+
+        const expectedType = schema[key].type;
+        const actualValue = (data as Record<string, any>)[key];
+        const actualType = typeof actualValue;
+
+        // 🔹 Sonderfall: "integer" vs. "number"
+        if (expectedType === "integer") {
+            if (!Number.isInteger(actualValue)) {
+                console.error(`Feld ${key} sollte ein Integer sein, aber ist: ${actualValue} (Typ: ${actualType})`);
+                return false;
+            }
+        } else {
+            if (actualType !== expectedType) {
+                console.error(`Feld ${key} sollte vom Typ ${expectedType} sein, aber ist: ${actualType}`);
+                return false;
+            }
+        }
+    }
+
+    console.log("Schema-Validierung erfolgreich!");
+    return true;
+}
+
+function removeRequest(request: PresentationRequest) {
+    console.log(request.sessionId)
+    const dashBoardSocket = activeSessions.get(request.sessionId);
+    if (dashBoardSocket) {
+        console.log("Nachricht an Websocket: ", request.sessionId)
+        dashBoardSocket.send(JSON.stringify({ type: "request-deleted", request: request.requestId }));
+    }
+    pendingRequests.delete(request.requestId)
 }

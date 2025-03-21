@@ -55,6 +55,8 @@ docker-compose up --build
 
 #### Ohne Docker
 
+Führe die folgenden Befehle jeweils in eigenen Terminals aus:
+
 ```sh
 # URL in .env setzen und ggf. ngrok starten
 node update-env.js
@@ -71,7 +73,17 @@ cd ../dummy-agent && npm run build && npm start
 cd ../client && npm run build && npm start
 ```
 
-Die Anwendung ist dann unter einer dynamischen ngrok-URL oder `http://localhost:3000` erreichbar.
+Die Anwendung ist dann unter einer dynamischen ngrok-URL (siehe Terminal update-env.js) oder `http://localhost:3000` erreichbar.
+
+## Verwendung
+
+Zum Test der Anwendung sind zwei Demo-Benutzer mit folgenden Zugangsdaten angelegt:
+
+- Benutzername: tschmidt
+- Passwort: tsch123
+
+- Benutzername: smeier
+- Passwort: smei456
 
 ## 📡 API Endpunkte
 

@@ -337,7 +337,7 @@ function DummyWallet() {
       type: "RsaSignature2018",
       created: new Date().toISOString(),
       proofPurpose: "authentication",
-      verificationMethod: `/issuer/${identifier}#key-1`,
+      verificationMethod: `/issuer/${identifier}`,
       jws: jws,
     };
 

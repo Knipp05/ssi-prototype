@@ -21,7 +21,6 @@ export const activeUsers = new Map<string, number>();
 
 export const supportedSchemas = await initSupportedSchemas(); // Key: schemaID, value: type
 
-// TODO: Middleware ordentlich implementieren!!!
 app.use(cors({
     origin: FRONTEND_URL,
     methods: ["GET", "POST"],

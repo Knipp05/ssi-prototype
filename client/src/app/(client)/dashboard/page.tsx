@@ -130,34 +130,35 @@ export default function Dashboard() {
   return (
     isValidated && (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-lg text-center">
-          <h1 className="text-2xl font-bold mb-4">📚 Geschütztes Dashboard</h1>
-          <p className="text-gray-600 mb-6">
+        <div className="bg-white p-10 rounded-lg shadow-lg w-full max-w-2xl text-center">
+          <h1 className="text-2xl font-bold mb-6">📚 Geschütztes Dashboard</h1>
+          <p className="text-gray-600 mb-8">
             Willkommen im Studienportal, {user}!
           </p>
-          <div className="flex flex-wrap justify-center gap-4">
+
+          <div className="flex flex-row justify-center gap-6 w-full items-start">
             {/* Kachel für Studienbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-full cursor-pointer hover:bg-blue-200 transition relative"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between items-center"
               onClick={() => requestCredentialOffer("EnrollmentCredential")}
             >
-              <h2 className="text-lg font-semibold text-blue-900">
-                📜 Studienbescheinigung ausstellen
-              </h2>
-              <p className="text-sm text-gray-700 mt-2">
-                Erhalte eine digitale Studienbescheinigung als Verifiable
-                Credential.
-              </p>
+              <div>
+                <h2 className="text-lg font-semibold text-blue-900 text-center">
+                  📜 Studienbescheinigung ausstellen
+                </h2>
+                <p className="text-sm text-gray-700 mt-2 text-center">
+                  Erhalte eine digitale Studienbescheinigung als Verifiable
+                  Credential.
+                </p>
+              </div>
 
-              {/* QR-Code mit Fade-in Effekt */}
+              {/* QR-Code wird nur sichtbar, wenn vorhanden */}
               {qrData["EnrollmentCredential"] && (
-                <div className="mt-4 flex flex-col items-center justify-center">
-                  <QRCode value={qrData["EnrollmentCredential"]} />
+                <div className="mt-4 flex flex-col items-center">
+                  <QRCode value={qrData["EnrollmentCredential"]} size={128} />
                   <p className="text-xs text-gray-500 mt-2 text-center">
                     Scanne den QR-Code mit deiner Wallet.
                   </p>
-
-                  {/* Button zum Öffnen der Wallet in einem neuen Tab */}
                   <a
                     href={qrData["EnrollmentCredential"]}
                     target="_blank"
@@ -172,28 +173,31 @@ export default function Dashboard() {
 
             {/* Kachel für Exmatrikulationsbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-full cursor-pointer hover:bg-blue-200 transition relative"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between items-center"
               onClick={() =>
                 requestCredentialOffer("ExmatriculationCredential")
               }
             >
-              <h2 className="text-lg font-semibold text-blue-900">
-                📜 Exmatrikulationsbescheinigung ausstellen
-              </h2>
-              <p className="text-sm text-gray-700 mt-2">
-                Erhalte eine digitale Exmatrikulationsbescheinigung als
-                Verifiable Credential.
-              </p>
+              <div>
+                <h2 className="text-lg font-semibold text-blue-900 text-center">
+                  📜 Exmatrikulationsbescheinigung ausstellen
+                </h2>
+                <p className="text-sm text-gray-700 mt-2 text-center">
+                  Erhalte eine digitale Exmatrikulationsbescheinigung als
+                  Verifiable Credential.
+                </p>
+              </div>
 
-              {/* QR-Code mit Fade-in Effekt */}
+              {/* QR-Code wird nur sichtbar, wenn vorhanden */}
               {qrData["ExmatriculationCredential"] && (
-                <div className="mt-4 flex flex-col items-center justify-center">
-                  <QRCode value={qrData["ExmatriculationCredential"]} />
+                <div className="mt-4 flex flex-col items-center">
+                  <QRCode
+                    value={qrData["ExmatriculationCredential"]}
+                    size={128}
+                  />
                   <p className="text-xs text-gray-500 mt-2 text-center">
                     Scanne den QR-Code mit deiner Wallet.
                   </p>
-
-                  {/* Button zum Öffnen der Wallet in einem neuen Tab */}
                   <a
                     href={qrData["ExmatriculationCredential"]}
                     target="_blank"
@@ -210,7 +214,7 @@ export default function Dashboard() {
           {/* Abmelden-Button */}
           <button
             onClick={logout}
-            className="mt-6 px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-red-600 hover:scale-105 active:scale-95 w-full"
+            className="mt-8 px-5 py-3 bg-red-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-red-600 hover:scale-105 active:scale-95 w-full"
           >
             🚪 Abmelden
           </button>

@@ -71,14 +71,14 @@ export default function Home() {
             type="text"
             value={username}
             placeholder="Benutzername"
-            className="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-200"
+            className="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-200 text-black"
             onChange={(e) => setUsername(e.target.value)}
           />
           <input
             type="password"
             value={password}
             placeholder="Passwort"
-            className="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-200"
+            className="w-full px-4 py-2 border rounded-lg focus:ring focus:ring-blue-200 text-black"
             onChange={(e) => setPassword(e.target.value)}
           />
           <button

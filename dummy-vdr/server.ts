@@ -2,12 +2,12 @@ import express from "express";
 import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
-import { PORT, VDR_URL } from "./constants.js";
+import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "./constants.js";
 
 const app = express();
 
 app.use(cors({
-    origin: "*",
+    origin: [FRONTEND_URL, BACKEND_URL],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "ngrok-skip-browser-warning"]
 }));

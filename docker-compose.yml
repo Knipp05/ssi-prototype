@@ -1,26 +1,62 @@
 version: "3.8"
 
 services:
+  env-setup:
+    build: .
+    command: ["node", "update-env.js"]
+    volumes:
+      - ./config:/config
+      - ./.env:/config/.env # .env im Root in das config-Verzeichnis mounten
+    environment:
+      - CHOICE=localhost # Falls kein Benutzerinput möglich ist, Standardwert setzen
+
   frontend:
     build: ./client
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:5000
-      - NEXT_PUBLIC_VDR_URL=http://vdr:7000
+    env_file:
+      - .env # Lade Variablen aus der .env Datei
     depends_on:
-      - backend
+      env-setup:
+        condition: service_completed_successfully
 
   backend:
     build: ./dummy-agent
     ports:
       - "3001:3001"
-    environment:
-      - VDR_URL=http://vdr:7000
+    env_file:
+      - .env # Lade Umgebungsvariablen aus .env
+    volumes:
+      - backend_data:/app
+      - ./.env:/app/.env # .env im Root für das Backend verfügbar machen
     depends_on:
-      - vdr
+      env-setup:
+        condition: service_completed_successfully
+      vdr:
+        condition: service_started
 
   vdr:
     build: ./dummy-vdr
     ports:
       - "3002:3002"
+    env_file:
+      - .env # Lade Umgebungsvariablen aus .env
+    volumes:
+      - vdr_data:/app
+      - ./.env:/app/.env # .env im Root für VDR verfügbar machen
+    depends_on:
+      env-setup:
+        condition: service_completed_successfully
+
+  ngrok:
+    image: ngrok/ngrok
+    command: ["http", "3001"]
+    env_file:
+      - .env # Lade NGROK_AUTHTOKEN aus .env
+    depends_on:
+      env-setup:
+        condition: service_completed_successfully
+
+volumes:
+  backend_data:
+  vdr_data:
