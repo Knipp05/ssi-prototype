@@ -131,7 +131,9 @@ export default function Dashboard() {
     isValidated && (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
         <div className="bg-white p-10 rounded-lg shadow-lg w-full max-w-2xl text-center">
-          <h1 className="text-2xl font-bold mb-6">📚 Geschütztes Dashboard</h1>
+          <h1 className="text-2xl font-bold mb-6 text-black">
+            📚 Geschütztes Dashboard
+          </h1>
           <p className="text-gray-600 mb-8">
             Willkommen im Studienportal, {user}!
           </p>

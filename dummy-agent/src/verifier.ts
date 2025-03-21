@@ -1,12 +1,13 @@
 import { Request, Response } from "express"
 import jwt from "jsonwebtoken"
-import { JWT_SECRET, VDR_URL } from "./constants.js"
+import { JWT_SECRET, PRIVATE_KEY_PATH, VDR_URL } from "./constants.js"
 import { openDB } from "./database.js";
 import { v4 as uuidv4 } from "uuid"
 import { compare } from "bcrypt-ts";
 import { issueJWT } from "./issuer.js";
-import { importJWK, jwtVerify } from "jose";
+import { importJWK, jwtVerify, SignJWT } from "jose";
 import { activeSessions, activeUsers, pendingRequests } from "./index.js";
+import fs from "fs";
 import { PresentationRequest } from "./types.js";
 
 export function authenticateJWT(req: Request, res: Response) {
@@ -72,6 +73,16 @@ export async function verifyPresentation (req: Request, res: Response) {
         const issuerData = await issuerResponse.json()
         const issuerPublicKey = await importJWK(issuerData.publicKey, "RS256");
         const vc = vp.verifiableCredential[0];
+
+        const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
+
+        const { proof, ...credential } = vc;
+
+        const validationJws = await new SignJWT(credential).setProtectedHeader({ alg: "RS256" }).sign(await importJWK(privateKeyJWK, "RS256"));
+        if (validationJws !== vc.proof.jws) {
+            res.status(400).json({ message: "VC-Signatur ist ungültig!" })
+            return;
+        }
 
         try {
             await jwtVerify(vc.proof.jws, issuerPublicKey);

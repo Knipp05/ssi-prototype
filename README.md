@@ -75,15 +75,21 @@ cd ../client && npm run build && npm start
 
 Die Anwendung ist dann unter einer dynamischen ngrok-URL (siehe Terminal update-env.js) oder `http://localhost:3000` erreichbar.
 
-## Verwendung
+## 📌 Verwendung
 
-Zum Test der Anwendung sind zwei Demo-Benutzer mit folgenden Zugangsdaten angelegt:
+Zum Test der Anwendung stehen zwei **Demo-Benutzer** mit folgenden Zugangsdaten zur Verfügung:
 
-- Benutzername: tschmidt
-- Passwort: tsch123
+### 🧑‍🎓 Benutzer 1
 
-- Benutzername: smeier
-- Passwort: smei456
+- **Benutzername:** `tschmidt`
+- **Passwort:** `tsch123`
+
+### 🧑‍🎓 Benutzer 2
+
+- **Benutzername:** `smeier`
+- **Passwort:** `smei456`
+
+🔐 **Hinweis:** Diese Zugangsdaten dienen nur zu Demonstrationszwecken.
 
 ## 📡 API Endpunkte
 

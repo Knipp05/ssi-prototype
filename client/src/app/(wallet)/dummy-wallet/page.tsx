@@ -406,7 +406,7 @@ function DummyWallet() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 bg-white rounded-lg shadow-lg border">
-      <h1 className="text-2xl font-bold flex items-center gap-2 mb-4">
+      <h1 className="text-2xl font-bold flex items-center gap-2 mb-4 text-black">
         Dummy Wallet
       </h1>
       {!isCryptoSupported && (
@@ -486,9 +486,7 @@ function DummyWallet() {
           <p>
             <strong>Nachweistyp:</strong> {presentation.requiredSchemaTypes[1]}
           </p>
-          <p>
-            {/* <strong>Aussteller:</strong> {presentation.} // hier später Namen des Anfragers */}
-          </p>
+          <p></p>
           <div className="mt-3 flex gap-4">
             {activePresentationRequest ? (
               <div className="flex items-center gap-2">
@@ -515,7 +513,7 @@ function DummyWallet() {
 
       <div className="flex items-center justify-between mb-4 p-4 bg-gray-100 rounded-lg shadow-md">
         <p className="text-lg font-medium">
-          <strong>Identifier:</strong>{" "}
+          <strong className="text-black">Identifier:</strong>{" "}
           <span className="text-blue-600">
             {identifier || "-- kein Identifier registriert --"}
           </span>
@@ -544,7 +542,9 @@ function DummyWallet() {
         )}
       </div>
 
-      <h2 className="text-xl font-semibold mb-3">📜 Meine Credentials</h2>
+      <h2 className="text-xl font-semibold mb-3 text-black">
+        📜 Meine Credentials
+      </h2>
 
       {activePresentationRequest && presentationRequests.length > 0 ? (
         credentials.length === 0 ? (
@@ -561,7 +561,7 @@ function DummyWallet() {
                   : "cursor-not-allowed opacity-50"
               }`}
             >
-              <Credential credential={cred} />{" "}
+              <Credential credential={cred} setCredentials={setCredentials} />{" "}
               {/* Hier unbeding dynamische Darstellung der Credential Daten machen!!!! */}
             </div>
           ))
@@ -571,7 +571,11 @@ function DummyWallet() {
       ) : (
         <ul className="space-y-4">
           {credentials.map((cred) => (
-            <Credential key={cred.id} credential={cred} />
+            <Credential
+              key={cred.id}
+              credential={cred}
+              setCredentials={setCredentials}
+            />
           ))}
         </ul>
       )}
