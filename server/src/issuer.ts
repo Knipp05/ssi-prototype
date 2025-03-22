@@ -40,26 +40,15 @@ export async function initSupportedSchemas(): Promise<Map<string, string>> {
 
         if (existingSchemaId) {
             console.log(`✅ Schema ${type} existiert bereits mit ID: ${existingSchemaId}`);
-            supportedSchemas.set(existingSchemaId, type)
+            supportedSchemas.set(type, existingSchemaId)
         } else {
             console.log(`⚠️ Schema ${type} nicht gefunden. Registriere neu...`);
             const newSchemaId = await createSchema(schemaDefinition);
             console.log(`📌 Neues Schema ${type} registriert mit ID: ${newSchemaId}`);
-            supportedSchemas.set(newSchemaId, type)
+            supportedSchemas.set(type, newSchemaId)
         }
     }
     return supportedSchemas
-}
-
-export async function fetchSchemas(req: Request, res: Response) {
-    const schemas = new Map<string, string>();
-    for (const [key, value] of supportedSchemas.entries()) {
-        schemas.set(value, key);
-    }
-
-    const schemasObject = Object.fromEntries(schemas)
-
-    res.status(200).json({ schemas: schemasObject })
 }
 
 export function issueJWT(userId: string) {
@@ -67,9 +56,9 @@ export function issueJWT(userId: string) {
 }
 
 export async function offerCredential(req: Request, res: Response) {
-    const { sessionId, schemaId, schemaType } = req.body;
-    if (!sessionId || !schemaId) {
-        res.status(400).json({ message: "Session ID und Schema ID  erforderlich" });
+    const { sessionId, schemaType } = req.body;
+    if (!sessionId || !schemaType) {
+        res.status(400).json({ message: "Session ID und Schema Typ  erforderlich" });
         return;
     }
 
@@ -80,9 +69,15 @@ export async function offerCredential(req: Request, res: Response) {
         offerId = uuidv4();
     }
 
+    const schemaId = supportedSchemas.get(schemaType)
+
+    if(!schemaId) {
+        res.status(404).json({ message: "Schema nicht gefunden!"})
+        return;
+    }
+
     const offer: CredentialOffer = {
         offerId,
-        schemaId,
         schemaType,
         issuerId: ISSUER_UUID,
         sessionId
@@ -102,9 +97,9 @@ export async function offerCredential(req: Request, res: Response) {
 }
 
 export async function acceptCredentialOffer(req: Request, res: Response) {
-    const { offerId, holderId } = req.body;
-    if (!offerId || !holderId) {
-        res.status(400).json({ message: "Offer ID, Holder ID, Schema ID erforderlich" });
+    const { offerId, walletDid } = req.body;
+    if (!offerId || !walletDid) {
+        res.status(400).json({ message: "Offer ID, Wallet DID, Schema ID erforderlich" });
         return;
     }
 
@@ -128,7 +123,7 @@ export async function acceptCredentialOffer(req: Request, res: Response) {
         return;
     }
 
-    const credential = await issueCredential(holderId, credentialOffer.schemaId, registrationNumber);
+    const credential = await issueCredential(walletDid, credentialOffer.schemaType, registrationNumber);
     if (credential.error) {
         console.log(credential.error)
         removeOffer(credentialOffer)
@@ -152,7 +147,7 @@ export function declineOffer(req: Request, res: Response) {
 
 async function checkIfIssuerRegistered(): Promise<boolean> {
     try {
-        const response = await fetch(`${VDR_URL}/issuer/${encodeURIComponent(ISSUER_UUID)}`, {
+        const response = await fetch(`${VDR_URL}/check-identifier/${encodeURIComponent(ISSUER_UUID)}`, {
             method: "GET",
             headers: {
               "ngrok-skip-browser-warning": "true",
@@ -297,15 +292,15 @@ function removeOffer(offer: CredentialOffer) {
     pendingOffers.delete(offer.offerId)
 }
 
-async function issueCredential(holderId: string, schemaId: string, registrationNumber: number) {
-    console.log("Anfrage zur Ausstellung von: ", holderId)
+async function issueCredential(walletDid: string, schemaType: string, registrationNumber: number) {
+    console.log("Anfrage zur Ausstellung von: ")
 
     try {
-        if (!holderId || !schemaId) {
-            return { message: "Holder ID und Schema ID erforderlich!" };
+        if (!walletDid || !schemaType) {
+            return { message: "Wallet DID und Schema Typ erforderlich!" };
         }
 
-        const userResponse = await fetch(`${VDR_URL}/issuer/${holderId}`, {
+        const userResponse = await fetch(`${VDR_URL}/check-identifier/${walletDid}`, {
             method: "GET",
             headers: {
               "ngrok-skip-browser-warning": "true",
@@ -315,6 +310,11 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
 
         if (!userResponse.ok) {
             return { error: "Benutzer-Identifier nicht gefunden" };
+        }
+
+        const schemaId = supportedSchemas.get(schemaType);
+        if (!schemaId) {
+            return { message: "Schema nicht gefunden!"};
         }
 
         // Prüfen, ob das Schema existiert
@@ -331,11 +331,6 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
         }
         const schemaData = await schemaResponse.json();
         console.log("Schemadaten: ", schemaData)
-        const schemaType = supportedSchemas.get(schemaId)
-
-        if(!schemaType) {
-            return { error: "Schema Typ nicht gefunden" };
-        }
 
         const db = await openDB();
         if (!db) {
@@ -350,7 +345,7 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
             return { error: "Student nicht gefunden!" }
         }
 
-        const data = await getStudentDataForSchema(registrationNumber, schemaId, db)
+        const data = await getStudentDataForSchema(registrationNumber, schemaType, db)
         if (!data) {
             return { error: "Fehler beim Laden der Studentendaten!" }
         }
@@ -364,7 +359,7 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
             ...data,
             birth_date: formatDate(new Date(data.birth_date)),
             enrollment_date: formatDate(new Date(data.enrollment_date)),
-            id: holderId,
+            id: walletDid,
             university_semester: universitySemester,
             issuance_date: formatDate(issuanceDate),
             expiry_date: formatDate(expiryDate)
@@ -372,7 +367,7 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
             ...data,
             birth_date: formatDate(new Date(data.birth_date)),
             enrollment_date: formatDate(new Date(data.enrollment_date)),
-            id: holderId,
+            id: walletDid,
             total_semesters: universitySemester,
             issuance_date: formatDate(issuanceDate),
             exmatriculation_date: formatDate(expiryDate)
@@ -384,17 +379,11 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
             return { error: "Daten entsprechen nicht dem Schema"};
         }
 
-        // Laden des privaten Schlüssels des Issuers
-        if (!fs.existsSync(PRIVATE_KEY_PATH)) {
-            return { error: "Privater Schlüssel des Issuers fehlt" };
-        }
-        const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
-
         // Credential-Objekt erstellen
         const credential = {
             id: uuidv4(),
             type: [ "VerifiableCredential", schemaType],
-            issuer: `/issuer/${ISSUER_UUID}`,
+            issuer: `/identifier/${ISSUER_UUID}`,
             issuanceDate: new Date().toISOString(),
             credentialSubject: credentialSubject,
             credentialSchema: {
@@ -402,28 +391,40 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
             }
         };
 
-        // Credential signieren
-        const proof = {
-            type: "JsonWebSignature2020",
-            created: new Date().toISOString(),
-            proofPurpose: "assertionMethod",
-            verificationMethod: `/issuer/${ISSUER_UUID}`,
-            jws: await new SignJWT(credential)
-            .setProtectedHeader({ alg: "RS256" })
-            .sign(await importJWK(privateKeyJWK, "RS256"))
-        }
-        
-        const signedCredential = {
-            ...credential,
-            proof: proof
-        }
+        const signedCredential = await signCredential(credential)
+        if(!signedCredential) {
+            return { error: "Fehler beim Signieren des Credentials"}
+        } 
 
-        return { signedCredential };
+        return signedCredential
 
     } catch (err) {
         console.error("Fehler bei der Credential-Erstellung:", err);
         return { error: "Fehler bei der Credential-Ausstellung" };
     }
+}
+
+async function signCredential(credential: any): Promise<any> {
+    if (!fs.existsSync(PRIVATE_KEY_PATH)) {
+        return null;
+    }
+    const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
+    const proof = {
+        type: "JsonWebSignature2020",
+        created: new Date().toISOString(),
+        proofPurpose: "assertionMethod",
+        verificationMethod: `/identifier/${ISSUER_UUID}`,
+        jws: await new SignJWT(credential)
+        .setProtectedHeader({ alg: "RS256" })
+        .sign(await importJWK(privateKeyJWK, "RS256"))
+    }
+
+    const signedCredential = {
+        ...credential,
+        proof: proof
+    }
+
+    return { signedCredential };
 }
 
 function formatDate(date: Date): string {
@@ -434,8 +435,7 @@ function formatDate(date: Date): string {
     })
 }
 
-async function getStudentDataForSchema(registrationNumber: number, schemaId: string, db: any) {
-    const schemaType = supportedSchemas.get(schemaId);
+async function getStudentDataForSchema(registrationNumber: number, schemaType: string, db: any) {
     if (!schemaType) return null;
 
     const schema = supportedCredentials[schemaType];

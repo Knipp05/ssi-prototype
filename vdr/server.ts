@@ -33,7 +33,7 @@ async function initDB() {
             definition TEXT NOT NULL
         );
     `);
-    console.log("✅ Dummy VDR initialisiert.");
+    console.log("✅ VDR initialisiert.");
 }
 
 app.post("/register-identifier", async (req, res) => {
@@ -61,7 +61,7 @@ app.post("/register-identifier", async (req, res) => {
 });
 
 
-app.get("/issuer/:id", async (req, res) => {
+app.get("/identifier/:id", async (req, res) => {
     const { id } = req.params;
     const decodedId = decodeURIComponent(id)
     console.log("Anfrage zu Issuer: ", id)
@@ -82,6 +82,24 @@ app.get("/issuer/:id", async (req, res) => {
     } else {
         res.status(404).json({ message: "Bezeichner nicht gefunden" });
         return
+    }
+});
+
+app.get("/check-identifier/:id", async (req, res) => {
+    const { id } = req.params;
+    const decodedId = decodeURIComponent(id)
+    console.log("Anfrage zu Issuer: ", id)
+    try {
+        const db = await openDB();
+        const result = await db.get("SELECT publicKey FROM identifiers WHERE id = ?", [decodedId]);
+        if (!result) {
+            res.status(404).json({ message: "DID ist nicht in VDR vorhanden!"})
+        } else {
+            res.status(200).json({ message: "DID ist in VDR vorhanden!"})
+        }
+    } catch(error) {
+        console.log(error)
+        res.status(400).json({ message: "Fehler bei der Abfrage aus der Datenbank!"})
     }
 });
 
@@ -166,6 +184,6 @@ app.post("/schema/id-by-hash", async (req, res) => {
 (async () => {
     await initDB();
     app.listen(PORT, () => {
-        console.log(`Dummy VDR läuft auf ${VDR_URL}`);
+        console.log(`VDR läuft auf ${VDR_URL}`);
     });
 })();

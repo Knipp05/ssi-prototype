@@ -8,18 +8,18 @@ import Credential from "./Credential";
 import Link from "next/link";
 import { Suspense } from "react";
 
-const STORAGE_KEY = "dummyWalletIdentifier";
-const CREDENTIALS_STORAGE_KEY = "dummyWalletCredentials";
+const STORAGE_KEY = "walletIdentifier";
+const CREDENTIALS_STORAGE_KEY = "walletCredentials";
 
-export default function DummyWalletWrapper() {
+export default function WalletWrapper() {
   return (
     <Suspense fallback={<div>Laden ...</div>}>
-      <DummyWallet />
+      <Wallet />
     </Suspense>
   );
 }
 
-function DummyWallet() {
+function Wallet() {
   const searchParams = useSearchParams();
   const [sessionId, setSessionId] = useState<string | null>(
     searchParams.get("sessionId")
@@ -47,7 +47,7 @@ function DummyWallet() {
 
       const storedId = localStorage.getItem(STORAGE_KEY);
 
-      if (storedId && localStorage.getItem("dummyWalletPrivateKey")) {
+      if (storedId && localStorage.getItem("walletPrivateKey")) {
         const storedData = JSON.parse(storedId);
         console.log("Identifier und Schlüsselpaar existieren bereits!");
         console.log("✅ Identifier gefunden:", storedData.id);
@@ -136,7 +136,7 @@ function DummyWallet() {
       keyPair.publicKey
     );
 
-    localStorage.setItem("dummyWalletPrivateKey", JSON.stringify(privateKey));
+    localStorage.setItem("walletPrivateKey", JSON.stringify(privateKey));
 
     return { userId, publicJWK: publicKey };
   }
@@ -151,7 +151,7 @@ function DummyWallet() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        holderId: identifier,
+        walletDid: identifier,
         offerId: offer.offerId,
       }),
     });
@@ -167,13 +167,13 @@ function DummyWallet() {
     const newCredential = result.credential.signedCredential;
 
     const storedCredentials = JSON.parse(
-      localStorage.getItem("dummyWalletCredentials") || "[]"
+      localStorage.getItem("walletCredentials") || "[]"
     );
 
     const updatedCredentials = [...storedCredentials, newCredential];
 
     localStorage.setItem(
-      "dummyWalletCredentials",
+      "walletCredentials",
       JSON.stringify(updatedCredentials)
     );
 
@@ -230,7 +230,10 @@ function DummyWallet() {
     setActivePresentationRequest(null);
   }
 
-  async function createVerifiablePresentation<T>(credential: VC<T>) {
+  async function acceptPresentationRequest<T>(
+    credential: VC<T>,
+    request: PresentationRequest
+  ) {
     if (
       activePresentationRequest?.requiredSchemaTypes[1] !== credential.type[1]
     )
@@ -241,7 +244,7 @@ function DummyWallet() {
     }
 
     const privateKeyJWK = JSON.parse(
-      localStorage.getItem("dummyWalletPrivateKey") || "{}"
+      localStorage.getItem("walletPrivateKey") || "{}"
     );
 
     if (!privateKeyJWK.kty) {
@@ -249,20 +252,23 @@ function DummyWallet() {
       return;
     }
 
-    const vp = {
+    const presentation = {
       type: "VerifiablePresentation",
       verifiableCredential: [credential],
     };
 
-    const signedVP = await signVP(vp, privateKeyJWK);
+    const signedVP = await signVP(presentation, privateKeyJWK);
 
-    const response = await fetch(`${BACKEND_URL}/verify-credential`, {
+    const response = await fetch(`${BACKEND_URL}/verify-presentation`, {
       method: "POST",
       headers: {
         "ngrok-skip-browser-warning": "true",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ sessionId: sessionId, vp: signedVP }),
+      body: JSON.stringify({
+        requestId: request.requestId,
+        presentation: signedVP,
+      }),
     });
 
     const responseData = await response.json();
@@ -283,13 +289,13 @@ function DummyWallet() {
     }
   }
 
-  async function signVP<T>(vp: TempVP<T>, privateKeyJWK: object) {
+  async function signVP<T>(presentation: TempVP<T>, privateKey: object) {
     const header = {
       alg: "RS256",
       typ: "JWT",
     };
 
-    const payload = vp;
+    const payload = presentation;
     const encoder = new TextEncoder();
 
     // Base64URL-encode Header und Payload
@@ -306,7 +312,7 @@ function DummyWallet() {
     // Private Key importieren
     const key = await window.crypto.subtle.importKey(
       "jwk",
-      privateKeyJWK,
+      privateKey,
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       false,
       ["sign"]
@@ -332,25 +338,28 @@ function DummyWallet() {
       type: "RsaSignature2018",
       created: new Date().toISOString(),
       proofPurpose: "authentication",
-      verificationMethod: `/issuer/${identifier}`,
+      verificationMethod: `/identifier/${identifier}`,
       jws: jws,
     };
 
     return {
-      ...vp,
+      ...presentation,
       proof,
     };
   }
 
   async function registerUserWithVDR(userId: string, publicKey: object) {
     try {
-      const checkResponse = await fetch(`${VDR_URL}/issuer/${userId}`, {
-        method: "GET",
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-          "Content-Type": "application/json",
-        },
-      });
+      const checkResponse = await fetch(
+        `${VDR_URL}/check-identifier/${userId}`,
+        {
+          method: "GET",
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (checkResponse.ok) {
         console.log(`✅ Benutzer ${userId} ist bereits im VDR registriert.`);
@@ -373,10 +382,7 @@ function DummyWallet() {
       const registerData = await registerResponse.json();
 
       if (!registerData.error) {
-        console.log(
-          "✅ Benutzer erfolgreich im Dummy VDR registriert:",
-          userId
-        );
+        console.log("✅ Benutzer erfolgreich im VDR registriert:", userId);
       } else {
         console.log(
           "❌ Fehler bei der Benutzerregistrierung:",
@@ -391,7 +397,7 @@ function DummyWallet() {
   function clearData(deletedElement: string) {
     if (deletedElement === "identifier") {
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("dummyWalletPrivateKey");
+      localStorage.removeItem("walletPrivateKey");
       setIdentifier("");
     } else if (deletedElement === "credentials") {
       localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
@@ -546,7 +552,9 @@ function DummyWallet() {
           credentials.map((cred) => (
             <div
               key={cred.id}
-              onClick={() => createVerifiablePresentation(cred)}
+              onClick={() =>
+                acceptPresentationRequest(cred, activePresentationRequest)
+              }
               className={`${
                 activePresentationRequest.requiredSchemaTypes[1] ===
                 cred.type[1]

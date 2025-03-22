@@ -50,7 +50,6 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sessionId,
-        requiredSchemaType: "EnrollmentCredential",
       }),
     });
     if (!response.ok) {

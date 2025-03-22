@@ -1,13 +1,12 @@
 import { Request, Response } from "express"
 import jwt from "jsonwebtoken"
-import { JWT_SECRET, PRIVATE_KEY_PATH, VDR_URL } from "./constants.js"
+import { JWT_SECRET, VDR_URL } from "./constants.js"
 import { openDB } from "./database.js";
 import { v4 as uuidv4 } from "uuid"
 import { compare } from "bcrypt-ts";
 import { issueJWT } from "./issuer.js";
-import { importJWK, jwtVerify, SignJWT } from "jose";
+import { compactVerify, importJWK, jwtVerify } from "jose";
 import { activeSessions, activeUsers, pendingRequests } from "./index.js";
-import fs from "fs";
 import { PresentationRequest } from "./types.js";
 
 export function authenticateJWT(req: Request, res: Response) {
@@ -32,122 +31,130 @@ export function authenticateJWT(req: Request, res: Response) {
 }
 
 export async function verifyPresentation (req: Request, res: Response) {
+    const { requestId, presentation } = req.body;
+    if (!requestId || !presentation) {
+        res.status(400).json({ message: "Session ID oder VP fehlt!" })
+        return;
+    }
+
+    console.log("VP erhalten: ", presentation)
+
+    const request = pendingRequests.get(requestId)
+    if (!request) {
+        res.status(404).json({ message: "Request nicht gefunden!"})
+        return;
+    }
+
+    const walletDid = presentation.verifiableCredential[0].credentialSubject.id;
+    const holderResponse = await fetch(`${VDR_URL}/identifier/${walletDid}`, {
+        headers: { "ngrok-skip-browser-warning": "true"},
+    });
+    if (!holderResponse.ok) {
+        res.status(404).json({ message: "Wallet DID nicht gefunden!" });
+        return;
+    }
+
+    const holderData = await holderResponse.json();
+    const holderPublicKey = await importJWK(holderData.publicKey, "RS256");
+
     try {
-        const { sessionId, vp } = req.body;
-        if (!sessionId || !vp) {
-            res.status(400).json({ message: "Session ID oder VP fehlt!" })
-            return;
-        }
-
-        console.log("VP erhalten: ", vp)
-
-        const holderId = vp.verifiableCredential[0].credentialSubject.id;
-        const holderResponse = await fetch(`${VDR_URL}/issuer/${holderId}`, {
-            headers: { "ngrok-skip-browser-warning": "true"},
-        });
-        if (!holderResponse.ok) {
-            res.status(404).json({ message: "Holder Identifier nicht gefunden!" });
-            return;
-        }
-
-        const holderData = await holderResponse.json();
-        const holderPublicKey = await importJWK(holderData.publicKey, "RS256");
-
-        try {
-            await jwtVerify(vp.proof.jws, holderPublicKey);
-            console.log("VP-Signatur des Holders ist gültig!");
-        } catch (error) {
-            console.error("Ungültige VP-Signatur des Holder: ", error);
-            res.status(400).json({ message: "VP-Signatur des Holders ungültig!" });
-            return;
-        }
-
-        const issuerId = vp.verifiableCredential[0].issuer;
-        const issuerResponse = await fetch(`${VDR_URL}${issuerId}`, {
-            headers: { "ngrok-skip-browser-warning": "true" },
-        });
-        if (!issuerResponse.ok) {
-            res.status(404).json({ message: "Issuer Identifier nicht gefunden!" });
-        }
-
-        const issuerData = await issuerResponse.json()
-        const issuerPublicKey = await importJWK(issuerData.publicKey, "RS256");
-        const vc = vp.verifiableCredential[0];
-
-        const privateKeyJWK = JSON.parse(fs.readFileSync(PRIVATE_KEY_PATH, "utf8"));
-
-        const { proof, ...credential } = vc;
-
-        const validationJws = await new SignJWT(credential).setProtectedHeader({ alg: "RS256" }).sign(await importJWK(privateKeyJWK, "RS256"));
-        if (validationJws !== vc.proof.jws) {
-            res.status(400).json({ message: "VC-Signatur ist ungültig!" })
-            return;
-        }
-
-        try {
-            await jwtVerify(vc.proof.jws, issuerPublicKey);
-            console.log("VC-Signatur des Issuers ist gültig!");
-        } catch (error) {
-            console.error("Ungültige VC-Signatur des Issuers: ", error)
-            res.status(400).json({ message: "VC-Signatur des Issuers ungültig!" });
-            return;
-        }
-
-        const schemaId = vc.credentialSchema.id;
-        const schemaResponse = await fetch(`${VDR_URL}${schemaId}`, {
-            headers: { "ngrok-skip-browser-warning": "true" },
-        });
-
-        if (!schemaResponse.ok) {
-            res.status(404).json({ message: "Schema nicht gefunden" })
-            return;
-        }
-
-        const schemaData = await schemaResponse.json();
-
-        if (!validateSchema(vc.credentialSubject, schemaData.schema)) {
-            res.status(400).json({ message: "Daten entsprechen nicht dem Schema!" })
-            return;
-        }
-
-        console.log("Credential Schema erfolgreich validiert!")
-
-        // Hier weitere Prüfung!
-
-        console.log("Alle Verifizierungschecks bestanden")
-
-        const userId = vp.verifiableCredential[0].credentialSubject.id;
-        const token = issueJWT(userId)
-
-        const db = await openDB();
-        if (!db) {
-            console.error("❌ Fehler: Datenbankverbindung fehlgeschlagen!");
-            res.status(400).json({ message: "Fehler beim Öffnen der Datenbank!" })
-            return;
-        }
-        console.log("✅ Datenbankverbindung erfolgreich!");
-
-        const studentName = await db.get("SELECT username FROM studentLogin WHERE registration_number = ?", [vp.verifiableCredential[0].credentialSubject.registration_number])
-
-        if(!studentName) {
-            res.status(404).json({ message: "Student nicht gefunden!" })
-            return;
-        }
-
-        if (activeSessions.has(sessionId)) {
-            const ws = activeSessions.get(sessionId);
-            ws?.send(JSON.stringify({ type: "verification-success", jwt: token, user: studentName.username}))
-            console.log(`Erfolg an Session ${sessionId} gesendet!`);
-        } else {
-            console.warn("Keine aktive WebSocket-Verbindung für diese Session ID gefunden!");
-        }
-
-        res.status(200).json({ message: "Verifizierung erfolgreich!" })
-        return;
+        await jwtVerify(presentation.proof.jws, holderPublicKey);
+        console.log("VP-Signatur des Holders ist gültig!");
     } catch (error) {
-        console.error("Fehler bei der Verifizierung: ", error)
-        res.status(500).json({ message: "Interner Serverfehler" })
+        console.error("Ungültige VP-Signatur des Holder: ", error);
+        res.status(400).json({ message: "VP-Signatur des Holders ungültig!" });
         return;
+    }
+
+    const issuerDid = presentation.verifiableCredential[0].issuer;
+    const issuerResponse = await fetch(`${VDR_URL}${issuerDid}`, {
+        headers: { "ngrok-skip-browser-warning": "true" },
+    });
+    if (!issuerResponse.ok) {
+        res.status(404).json({ message: "Issuer Identifier nicht gefunden!" });
+    }
+
+    const issuerData = await issuerResponse.json()
+    const issuerPublicKey = await importJWK(issuerData.publicKey, "RS256");
+    const credential = presentation.verifiableCredential[0];
+
+    if (!await verifyCredentialSignature(credential, issuerPublicKey)) {
+        console.error("Ungültige VC-Signatur!");
+        res.status(400).json({ message: "VC-Signatur ungültig!"});
+        return;
+    }
+
+    const schemaId = credential.credentialSchema.id;
+    const schemaResponse = await fetch(`${VDR_URL}${schemaId}`, { // SchemaId hat bereits Präfix /schema
+        headers: { "ngrok-skip-browser-warning": "true" },
+    });
+
+    if (!schemaResponse.ok) {
+         res.status(404).json({ message: "Schema nicht gefunden" })
+        return;
+    }
+
+    const schemaData = await schemaResponse.json();
+
+    if (!validateSchema(credential.credentialSubject, schemaData.schema)) {
+        res.status(400).json({ message: "Daten entsprechen nicht dem Schema!" })
+        return;
+    }
+
+    console.log("Credential Schema erfolgreich validiert!")
+
+    // Hier weitere Prüfung möglich...
+
+    console.log("Alle Verifizierungschecks bestanden")
+
+    const userId = presentation.verifiableCredential[0].credentialSubject.id;
+    const token = issueJWT(userId)
+
+    const db = await openDB();
+    if (!db) {
+        console.error("❌ Fehler: Datenbankverbindung fehlgeschlagen!");
+        res.status(400).json({ message: "Fehler beim Öffnen der Datenbank!" })
+        return;
+    }
+    console.log("✅ Datenbankverbindung erfolgreich!");
+
+    const studentName = await db.get("SELECT username FROM studentLogin WHERE registration_number = ?", [presentation.verifiableCredential[0].credentialSubject.registration_number])
+
+    if(!studentName) {
+        res.status(404).json({ message: "Student nicht gefunden!" })
+        return;
+    }
+
+    if (activeSessions.has(request.sessionId)) {
+        const ws = activeSessions.get(request.sessionId);
+        ws?.send(JSON.stringify({ type: "verification-success", jwt: token, user: studentName.username}))
+        console.log(`Erfolg an Session ${request.sessionId} gesendet!`);
+        pendingRequests.delete(request.requestId)
+    } else {
+        console.warn("Keine aktive WebSocket-Verbindung für diese Session ID gefunden!");
+        pendingRequests.delete(request.requestId)
+    }
+
+    res.status(200).json({ message: "Verifizierung erfolgreich!" })
+    return;
+}
+
+async function verifyCredentialSignature(credential: any, publicKey: CryptoKey | Uint8Array<ArrayBufferLike>): Promise<boolean> {
+    try {
+        const { payload } = await compactVerify(credential.proof.jws, publicKey);
+        const decodedPayload = JSON.parse(new TextDecoder().decode(payload));
+
+        const { proof, ...credentialPayload } = credential;
+        const credentialCanonical = JSON.stringify(credentialPayload);
+
+        if (JSON.stringify(decodedPayload) === credentialCanonical) {
+            return true
+        } else {
+            return false
+        }
+    } catch(error) {
+        console.log(error)
+        return false
     }
 }
 
@@ -184,10 +191,10 @@ export async function loginUser(req: Request, res: Response) {
     }
 }
 
-export async function loginWithSSI(req: Request, res: Response) {
-    const { sessionId, requiredSchemaType } = req.body;
+export async function requestPresentation(req: Request, res: Response) {
+    const { sessionId } = req.body;
 
-    if (!sessionId || !requiredSchemaType) {
+    if (!sessionId) {
         res.status(400).json({ message: "SessionID und Schema Typ erforderlich!" });
         return;
     }
@@ -197,12 +204,12 @@ export async function loginWithSSI(req: Request, res: Response) {
     const request: PresentationRequest = {
         sessionId,
         requestId,
-        requiredSchemaTypes: ["VerifiableCredential", requiredSchemaType]
+        requiredSchemaTypes: ["VerifiableCredential", "EnrollmentCredential"]
     }
 
     pendingRequests.set(requestId, request)
 
-    res.status(201).json({ message: "Anfrage erfolgreich erstellt!" });
+    res.status(201).json({ message: "Request wurde erstellt!"});
 }
 
 export function validateSchema(data: object, schema: any): boolean {
@@ -245,7 +252,7 @@ function removeRequest(request: PresentationRequest) {
     const dashBoardSocket = activeSessions.get(request.sessionId);
     if (dashBoardSocket) {
         console.log("Nachricht an Websocket: ", request.sessionId)
-        dashBoardSocket.send(JSON.stringify({ type: "request-deleted", request: request.requestId }));
+        dashBoardSocket.send(JSON.stringify({ type: "request-deleted", requestId: request.requestId }));
     }
     pendingRequests.delete(request.requestId)
 }

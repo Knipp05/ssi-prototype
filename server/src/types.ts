@@ -1,7 +1,6 @@
 export type CredentialOffer = {
     offerId: string;
     sessionId: string;
-    schemaId: string;
     schemaType: string;
     issuerId: string;
 }

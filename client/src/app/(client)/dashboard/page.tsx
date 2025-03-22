@@ -15,38 +15,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<string | null>(null);
   const { offers, sessionId } = useWebSocket();
   const [qrData, setQrData] = useState(initQrData);
-  const [supportedSchemas, setSupportedSchemas] = useState<Map<string, string>>(
-    new Map()
-  ); // Key: type, value: schemaID
   const [isValidated, setIsValidated] = useState(false);
-
-  useEffect(() => {
-    async function fetchSupportedSchemas() {
-      try {
-        const response = await fetch(`${BACKEND_URL}/get-schemas`, {
-          method: "GET",
-          headers: { "ngrok-skip-browser-warning": "true" },
-        });
-
-        if (!response.ok) {
-          console.error("❌ Fehler beim Abrufen der Schemata!");
-          return;
-        }
-
-        const data = await response.json();
-
-        const schemaMap: Map<string, string> = new Map(
-          Object.entries(data.schemas)
-        );
-
-        setSupportedSchemas(schemaMap);
-      } catch (error) {
-        console.error("❌ Netzwerkfehler beim Abrufen der Schemata!", error);
-      }
-    }
-
-    if (isValidated) fetchSupportedSchemas();
-  }, [isValidated]);
 
   useEffect(() => {
     if (isValidated && offers.length === 0) {
@@ -90,9 +59,8 @@ export default function Dashboard() {
   }, [router]);
 
   async function requestCredentialOffer(schemaType: string) {
-    const schemaId = supportedSchemas.get(schemaType);
-    if (!sessionId || !schemaId) {
-      alert("Keine Session ID oder Schema ID gefunden");
+    if (!sessionId || !schemaType) {
+      alert("Keine Session ID oder Schema Typ gefunden");
       return;
     }
 
@@ -102,7 +70,7 @@ export default function Dashboard() {
         "ngrok-skip-browser-warning": "true",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ sessionId, schemaId, schemaType }),
+      body: JSON.stringify({ sessionId, schemaType }),
     });
 
     if (!response.ok) {

@@ -23,7 +23,7 @@ export default function Credential(props: CredentialProps) {
         (cred) => cred.id !== props.credential.id
       );
       localStorage.setItem(
-        "dummyWalletCredentials",
+        "walletCredentials",
         JSON.stringify(updatedCredentials)
       );
       return updatedCredentials;
