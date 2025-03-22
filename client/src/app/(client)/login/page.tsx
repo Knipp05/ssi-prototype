@@ -62,7 +62,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <h1 className="text-2xl font-bold text-center mb-6 text-black">
-          🎓 Musterstudienportal
+          🎓 Studienportal
         </h1>
 
         {/* 🔐 Benutzername/Passwort Login */}
@@ -103,11 +103,11 @@ export default function Home() {
               📷 QR-Code scannen, um sich zu verifizieren:
             </p>
             <QRCode
-              value={`${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`}
+              value={`${FRONTEND_URL}/wallet?sessionId=${sessionId}`}
               className="mb-4 mx-auto"
             />
             <a
-              href={`${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`}
+              href={`${FRONTEND_URL}/wallet?sessionId=${sessionId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 inline-block px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"

@@ -2,8 +2,8 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "../../constants";
-import { CredentialOffer, PresentationRequest, TempVP, VC } from "../../types";
+import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "../constants";
+import { CredentialOffer, PresentationRequest, TempVP, VC } from "../types";
 import Credential from "./Credential";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -402,7 +402,7 @@ function DummyWallet() {
   return (
     <div className="max-w-3xl mx-auto p-6 bg-white rounded-lg shadow-lg border">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-4 text-black">
-        Dummy Wallet
+        Digital Wallet
       </h1>
       {!isCryptoSupported && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md">
@@ -413,15 +413,13 @@ function DummyWallet() {
             Diese Wallet kann nur via{" "}
             <strong>
               <u>
-                <Link href={`http://localhost:${PORT}/dummy-wallet`}>
-                  localhost
-                </Link>
+                <Link href={`http://localhost:${PORT}/wallet`}>localhost</Link>
               </u>
             </strong>{" "}
             oder über{" "}
             <strong>
               <u>
-                <Link href={`${FRONTEND_URL}/dummy-wallet`}>https</Link>
+                <Link href={`${FRONTEND_URL}/wallet`}>https</Link>
               </u>
             </strong>{" "}
             geöffnet werden. Ansonsten ist die WebCrypto API deaktiviert. Öffne

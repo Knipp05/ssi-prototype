@@ -96,7 +96,7 @@ export async function offerCredential(req: Request, res: Response) {
     } else {
         console.log("Wallet nicht aktiv. Zeige QR-Code zur Öffnung:", offerId);
         pendingOffers.set(offerId, offer)
-        const walletUrl = `${FRONTEND_URL}/dummy-wallet?sessionId=${sessionId}`;
+        const walletUrl = `${FRONTEND_URL}/wallet?sessionId=${sessionId}`;
         res.status(200).json({ url: walletUrl})
     }
 }
