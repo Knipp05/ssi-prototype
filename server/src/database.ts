@@ -40,7 +40,6 @@ export async function initDB(): Promise<void> {
     `);
 
     for (const student of students) {
-        console.log(student.enrollmentDate)
         const existingStudent = await db.get("SELECT * FROM students WHERE registration_number = ?", [student.registrationNumber])
 
         if (!existingStudent) {

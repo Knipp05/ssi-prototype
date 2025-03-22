@@ -31,8 +31,8 @@ cd ssi-prototype
 
 ```sh
 cd client && npm install
-cd ../dummy-agent && npm install
-cd ../dummy-vdr && npm install
+cd ../server && npm install
+cd ../vdr && npm install
 ```
 
 ### 4️⃣ .env Datei erstellen
@@ -40,6 +40,7 @@ cd ../dummy-vdr && npm install
 Kopiere die Beispieldatei und passe die Werte an:
 
 ```sh
+cd server
 cp .env.example .env
 ```
 
@@ -64,10 +65,10 @@ node update-env.js
 
 ```sh
 # VDR starten
-cd dummy-vdr && npm run build && npm start
+cd vdr && npm run build && npm start
 
 # Backend starten
-cd ../dummy-agent && npm run build && npm start
+cd ../server && npm run build && npm start
 
 # Frontend starten
 cd ../client && npm run build && npm start

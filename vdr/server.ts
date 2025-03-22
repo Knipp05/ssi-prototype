@@ -2,18 +2,17 @@ import express from "express";
 import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
-import { BACKEND_URL, FRONTEND_URL, PORT, VDR_URL } from "./constants.js";
+import { PORT, VDR_URL } from "./constants.js";
 
 const app = express();
 
 app.use(cors({
-    origin: [FRONTEND_URL, BACKEND_URL],
+    origin: "*",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "ngrok-skip-browser-warning"]
 }));
 app.use(express.json());
 
-// SQLite Datenbankverbindung
 async function openDB(): Promise<Database> {
     return open({
         filename: "./vdr.sqlite",
@@ -21,7 +20,6 @@ async function openDB(): Promise<Database> {
     });
 }
 
-// Initialisiert die Tabellen für Bezeichner & Schemata
 async function initDB() {
     const db = await openDB();
     await db.exec(`
@@ -38,7 +36,6 @@ async function initDB() {
     console.log("✅ Dummy VDR initialisiert.");
 }
 
-// Öffentlichen Schlüssel für eine ID speichern
 app.post("/register-identifier", async (req, res) => {
     const { id, publicKey } = req.body;
 
@@ -64,7 +61,6 @@ app.post("/register-identifier", async (req, res) => {
 });
 
 
-// Öffentlichen Schlüssel für eine ID abrufen
 app.get("/issuer/:id", async (req, res) => {
     const { id } = req.params;
     const decodedId = decodeURIComponent(id)
@@ -89,7 +85,6 @@ app.get("/issuer/:id", async (req, res) => {
     }
 });
 
-// Schema registrieren
 app.post("/register-schema", async (req, res) => {
     try {
         const { id, hash, definition } = req.body;
@@ -116,7 +111,6 @@ app.post("/register-schema", async (req, res) => {
     }
 });
 
-// Schema abrufen
 app.get("/schema/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -130,7 +124,6 @@ app.get("/schema/:id", async (req, res) => {
             return;
         }
 
-        // Sicherstellen, dass die Definition wirklich ein JSON-String ist
         let schemaData;
         try {
             schemaData = JSON.parse(result.definition);
@@ -161,7 +154,6 @@ app.post("/schema/id-by-hash", async (req, res) => {
             return;
         }
 
-        // ✅ Rückgabe der ID
         res.status(200).json({ id: result.id });
     } catch (err) {
         console.error("Fehler bei der Schema-Abfrage:", err);
@@ -171,7 +163,6 @@ app.post("/schema/id-by-hash", async (req, res) => {
 
 
 
-// Server starten
 (async () => {
     await initDB();
     app.listen(PORT, () => {

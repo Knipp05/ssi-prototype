@@ -8,7 +8,7 @@ import { FRONTEND_URL, BACKEND_URL } from "../../constants";
 
 export default function Home() {
   const router = useRouter();
-  const { sessionId, requests, loginError } = useWebSocket(); // 🎯 WebSocket aus Context verwenden
+  const { sessionId, requests, loginError } = useWebSocket();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showSSI, setShowSSI] = useState(false);

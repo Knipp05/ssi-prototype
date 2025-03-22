@@ -35,7 +35,6 @@ export default function Dashboard() {
 
         const data = await response.json();
 
-        // Konvertiere das Objekt in eine Map
         const schemaMap: Map<string, string> = new Map(
           Object.entries(data.schemas)
         );
@@ -154,7 +153,7 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* QR-Code wird nur sichtbar, wenn vorhanden */}
+              {/* QR-Code für Studienbescheinigung */}
               {qrData["EnrollmentCredential"] && (
                 <div className="mt-4 flex flex-col items-center">
                   <QRCode value={qrData["EnrollmentCredential"]} size={128} />
@@ -190,7 +189,7 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* QR-Code wird nur sichtbar, wenn vorhanden */}
+              {/* QR-Code für Exmatrikulationsbescheinigung */}
               {qrData["ExmatriculationCredential"] && (
                 <div className="mt-4 flex flex-col items-center">
                   <QRCode

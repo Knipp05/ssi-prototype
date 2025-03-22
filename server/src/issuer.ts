@@ -53,7 +53,6 @@ export async function initSupportedSchemas(): Promise<Map<string, string>> {
 
 export async function fetchSchemas(req: Request, res: Response) {
     const schemas = new Map<string, string>();
-    console.log(supportedSchemas)
     for (const [key, value] of supportedSchemas.entries()) {
         schemas.set(value, key);
     }
@@ -357,7 +356,6 @@ async function issueCredential(holderId: string, schemaId: string, registrationN
         }
 
         const { issuanceDate, expiryDate } = getSemesterValidityDates()
-        console.log(data.enrollment_date)
         const universitySemester = calculateUniversitySemester(data.enrollment_date)
   
         let credentialSubject;

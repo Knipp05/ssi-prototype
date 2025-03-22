@@ -107,7 +107,6 @@ function DummyWallet() {
     };
   }, [sessionId]);
 
-  // **Lädt alle gespeicherten Credentials aus localStorage**
   useEffect(() => {
     const storedCredentials = JSON.parse(
       localStorage.getItem(CREDENTIALS_STORAGE_KEY) || "[]"
@@ -167,21 +166,17 @@ function DummyWallet() {
 
     const newCredential = result.credential.signedCredential;
 
-    // **Bestehende Credentials aus localStorage laden**
     const storedCredentials = JSON.parse(
       localStorage.getItem("dummyWalletCredentials") || "[]"
     );
 
-    // **Neues Credential hinzufügen**
     const updatedCredentials = [...storedCredentials, newCredential];
 
-    // **Speichern im localStorage**
     localStorage.setItem(
       "dummyWalletCredentials",
       JSON.stringify(updatedCredentials)
     );
 
-    // **State aktualisieren**
     setCredentials(updatedCredentials);
     setCredentialOffers((oldCredentialOffers) =>
       oldCredentialOffers.filter(

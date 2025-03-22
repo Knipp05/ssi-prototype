@@ -12,6 +12,7 @@ const envPath = path.resolve(__dirname, "../../../.env");
 console.log("🌍 Lade .env von:", envPath);
 
 dotenv.config({ path: envPath });
+dotenv.config();
 
 // ✅ Variablen exportieren
 export const PORT = 3001;
@@ -19,8 +20,8 @@ export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://loca
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "http://localhost:3002";
 
-export const DATABASE_PATH = "./database.sqlite";
-export const PRIVATE_KEY_PATH = "private.pem";
-export const PUBLIC_KEY_PATH = "public.pem";
-export const ISSUER_UUID = process.env.ISSUER_UUID || `did:example:${uuidv4()}`; // hier lokale .env nutzen!
+export const DATABASE_PATH = process.env.DATABASE_PATH || "./database.sqlite";
+export const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH || "./private.pem";
+export const PUBLIC_KEY_PATH = process.env.PUBLIC_KEY_PATH || "public.pem";
+export const ISSUER_UUID = process.env.ISSUER_UUID || `did:example:${uuidv4()}`;
 export const JWT_SECRET = process.env.JWT_SECRET || "supersecretjwt"
