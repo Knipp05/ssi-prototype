@@ -97,16 +97,16 @@ export default function Dashboard() {
   return (
     isValidated && (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-        <div className="bg-white p-10 rounded-lg shadow-lg w-full max-w-2xl text-center">
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl text-center">
           <h1 className="text-2xl font-bold mb-6 text-black">📚 Dashboard</h1>
           <p className="text-gray-600 mb-8">
             Willkommen im Studienportal, {user}!
           </p>
 
-          <div className="flex flex-row justify-center gap-6 w-full items-start">
-            {/* Kachel für Studienbescheinigung */}
+          <div className="flex flex-row justify-center gap-6 w-full items-stretch">
+            {/* Studienbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between items-center"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between h-full"
               onClick={() => requestCredentialOffer("EnrollmentCredential")}
             >
               <div>
@@ -119,7 +119,6 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* QR-Code für Studienbescheinigung */}
               {qrData["EnrollmentCredential"] && (
                 <div className="mt-4 flex flex-col items-center">
                   <QRCode value={qrData["EnrollmentCredential"]} size={128} />
@@ -136,11 +135,20 @@ export default function Dashboard() {
                   </a>
                 </div>
               )}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className="mt-4 px-4 py-2 bg-gray-200 text-black font-semibold rounded-lg shadow hover:bg-gray-300 transition"
+              >
+                📄 Als PDF herunterladen
+              </button>
             </div>
 
-            {/* Kachel für Exmatrikulationsbescheinigung */}
+            {/* Exmatrikulationsbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between items-center"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between h-full"
               onClick={() =>
                 requestCredentialOffer("ExmatriculationCredential")
               }
@@ -155,7 +163,6 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* QR-Code für Exmatrikulationsbescheinigung */}
               {qrData["ExmatriculationCredential"] && (
                 <div className="mt-4 flex flex-col items-center">
                   <QRCode
@@ -175,6 +182,15 @@ export default function Dashboard() {
                   </a>
                 </div>
               )}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className="mt-4 px-4 py-2 bg-gray-200 text-black font-semibold rounded-lg shadow hover:bg-gray-300 transition"
+              >
+                📄 Als PDF herunterladen
+              </button>
             </div>
           </div>
 
