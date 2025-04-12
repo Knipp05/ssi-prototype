@@ -42,6 +42,7 @@ export default function Dashboard() {
 
       if (!response.ok) {
         console.error("Fehler bei Validierung des Token");
+        router.replace("/login");
         return;
       }
       const result = await response.json();
@@ -97,7 +98,7 @@ export default function Dashboard() {
   return (
     isValidated && (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl text-center">
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl text-center">
           <h1 className="text-2xl font-bold mb-6 text-black">📚 Dashboard</h1>
           <p className="text-gray-600 mb-8">
             Willkommen im Studienportal, {user}!
@@ -106,40 +107,40 @@ export default function Dashboard() {
           <div className="flex flex-row justify-center gap-6 w-full items-stretch">
             {/* Studienbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between h-full"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col h-full"
               onClick={() => requestCredentialOffer("EnrollmentCredential")}
             >
-              <div>
-                <h2 className="text-lg font-semibold text-blue-900 text-center">
-                  📜 Studienbescheinigung ausstellen
+              <div className="text-center">
+                <div className="text-2xl mb-1">📜</div>
+                <h2 className="text-lg font-semibold text-blue-900 break-words hyphens-auto leading-snug">
+                  Studienbescheinigung
                 </h2>
+                <div className="text-blue-800 mt-1">ausstellen</div>
                 <p className="text-sm text-gray-700 mt-2 text-center">
                   Erhalte eine digitale Studienbescheinigung als Verifiable
                   Credential.
                 </p>
+
+                {qrData["EnrollmentCredential"] && (
+                  <div className="mt-4 flex flex-col items-center">
+                    <QRCode value={qrData["EnrollmentCredential"]} size={128} />
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Scanne den QR-Code mit deiner Wallet.
+                    </p>
+                    <a
+                      href={qrData["EnrollmentCredential"]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"
+                    >
+                      🌐 Wallet im Browser öffnen
+                    </a>
+                  </div>
+                )}
               </div>
 
-              {qrData["EnrollmentCredential"] && (
-                <div className="mt-4 flex flex-col items-center">
-                  <QRCode value={qrData["EnrollmentCredential"]} size={128} />
-                  <p className="text-xs text-gray-500 mt-2 text-center">
-                    Scanne den QR-Code mit deiner Wallet.
-                  </p>
-                  <a
-                    href={qrData["EnrollmentCredential"]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"
-                  >
-                    🌐 Wallet im Browser öffnen
-                  </a>
-                </div>
-              )}
-
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+                onClick={(e) => e.stopPropagation()}
                 className="mt-4 px-4 py-2 bg-gray-200 text-black font-semibold rounded-lg shadow hover:bg-gray-300 transition"
               >
                 📄 Als PDF herunterladen
@@ -148,45 +149,44 @@ export default function Dashboard() {
 
             {/* Exmatrikulationsbescheinigung */}
             <div
-              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col justify-between h-full"
+              className="bg-blue-100 p-6 rounded-lg shadow-md border border-blue-300 w-1/2 cursor-pointer hover:bg-blue-200 transition flex flex-col h-full"
               onClick={() =>
                 requestCredentialOffer("ExmatriculationCredential")
               }
             >
-              <div>
-                <h2 className="text-lg font-semibold text-blue-900 text-center">
-                  📜 Exmatrikulationsbescheinigung ausstellen
+              <div className="text-center">
+                <div className="text-2xl mb-1">📜</div>
+                <h2 className="text-lg font-semibold text-blue-900 break-words hyphens-auto leading-snug">
+                  Exmatrikulationsbescheinigung
                 </h2>
+                <div className="text-blue-800 mt-1">ausstellen</div>
                 <p className="text-sm text-gray-700 mt-2 text-center">
-                  Erhalte eine digitale Exmatrikulationsbescheinigung als
-                  Verifiable Credential.
+                  Erhalte eine digitale Exmatrikulationsbescheinigung als VC.
                 </p>
+
+                {qrData["ExmatriculationCredential"] && (
+                  <div className="mt-4 flex flex-col items-center">
+                    <QRCode
+                      value={qrData["ExmatriculationCredential"]}
+                      size={128}
+                    />
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Scanne den QR-Code mit deiner Wallet.
+                    </p>
+                    <a
+                      href={qrData["ExmatriculationCredential"]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"
+                    >
+                      🌐 Wallet im Browser öffnen
+                    </a>
+                  </div>
+                )}
               </div>
 
-              {qrData["ExmatriculationCredential"] && (
-                <div className="mt-4 flex flex-col items-center">
-                  <QRCode
-                    value={qrData["ExmatriculationCredential"]}
-                    size={128}
-                  />
-                  <p className="text-xs text-gray-500 mt-2 text-center">
-                    Scanne den QR-Code mit deiner Wallet.
-                  </p>
-                  <a
-                    href={qrData["ExmatriculationCredential"]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md transition-all duration-300 hover:bg-blue-600 hover:scale-105 active:scale-95"
-                  >
-                    🌐 Wallet im Browser öffnen
-                  </a>
-                </div>
-              )}
-
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+                onClick={(e) => e.stopPropagation()}
                 className="mt-4 px-4 py-2 bg-gray-200 text-black font-semibold rounded-lg shadow hover:bg-gray-300 transition"
               >
                 📄 Als PDF herunterladen
