@@ -7,6 +7,7 @@ import { CredentialOffer, PresentationRequest, TempVP, VC } from "../types";
 import Credential from "./Credential";
 import Link from "next/link";
 import { Suspense } from "react";
+import { importJWK, SignJWT } from "jose";
 
 const STORAGE_KEY = "walletIdentifier";
 const CREDENTIALS_STORAGE_KEY = "walletCredentials";
@@ -289,53 +290,16 @@ function Wallet() {
     }
   }
 
-  async function signVP<T>(presentation: TempVP<T>, privateKey: object) {
-    const header = {
-      alg: "RS256",
-      typ: "JWT",
-    };
+  async function signVP<T>(presentation: TempVP<T>, privateKeyJwk: object) {
+    const key = await importJWK(privateKeyJwk, "RS256");
 
-    const payload = presentation;
-    const encoder = new TextEncoder();
+    const jws = await new SignJWT({ vp: presentation })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuedAt()
+      .sign(key);
 
-    // Base64URL-encode Header und Payload
-    const encodedHeader = btoa(JSON.stringify(header))
-      .replace(/=/g, "")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_");
-
-    const encodedPayload = btoa(JSON.stringify(payload))
-      .replace(/=/g, "")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_");
-
-    // Private Key importieren
-    const key = await window.crypto.subtle.importKey(
-      "jwk",
-      privateKey,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-
-    // Signatur erzeugen
-    const signature = await window.crypto.subtle.sign(
-      "RSASSA-PKCS1-v1_5",
-      key,
-      encoder.encode(`${encodedHeader}.${encodedPayload}`)
-    );
-
-    // Base64URL der Signatur erzeugen
-    const jwsSignature = Buffer.from(new Uint8Array(signature))
-      .toString("base64")
-      .replace(/=/g, "")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_");
-
-    // **Korrektes Compact JWS zurückgeben**
-    const jws = `${encodedHeader}.${encodedPayload}.${jwsSignature}`;
     const proof = {
-      type: "RsaSignature2018",
+      type: "JsonWebSignature2020",
       created: new Date().toISOString(),
       proofPurpose: "authentication",
       verificationMethod: `/identifier/${identifier}`,
