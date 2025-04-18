@@ -16,9 +16,9 @@ dotenv.config();
 
 // ✅ Variablen exportieren
 export const PORT = 3001;
-export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
-export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "http://localhost:3002";
+export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://frontend:3000";
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://backend:3001";
+export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "http://vdr:3002";
 
 export const DATABASE_PATH = process.env.DATABASE_PATH || "./database.sqlite";
 export const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH || "./private.pem";

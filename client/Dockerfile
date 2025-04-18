@@ -5,13 +5,15 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Kopiere package.json
-COPY package.json .
+COPY ./client/package.json .
 
 # Installiere Abhängigkeiten
 RUN npm install
 
+COPY .env .env
+
 # Kopiere den gesamten Code
-COPY . ./
+COPY client ./
 
 EXPOSE 3000
 

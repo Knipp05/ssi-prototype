@@ -27,15 +27,7 @@ git clone https://https://github.com/Knipp05/ssi-prototype.git
 cd ssi-prototype
 ```
 
-### 3️⃣ Abhängigkeiten installieren
-
-```sh
-cd client && npm install
-cd ../server && npm install
-cd ../vdr && npm install
-```
-
-### 4️⃣ .env Datei erstellen
+### 3️⃣ .env Datei erstellen
 
 Kopiere die Beispieldatei und passe die Werte an:
 
@@ -46,22 +38,26 @@ cp .env.example .env
 
 Falls **kein ngrok** genutzt wird, werden **localhost-Adressen** verwendet.
 
-### 5️⃣ Starten der Anwendung
-
-#### Mit Docker
-
-```sh
-docker-compose up --build
-```
-
-#### Ohne Docker
-
-Führe die folgenden Befehle jeweils in eigenen Terminals aus:
-
+### 4️⃣ Starten der Anwendung
 ```sh
 # URL in .env setzen und ggf. ngrok starten
 node update-env.js
 ```
+
+#### Mit Docker
+
+```sh
+docker compose up --build
+```
+
+#### Ohne Docker
+```sh
+cd client && npm install
+cd ../server && npm install
+cd ../vdr && npm install
+```
+
+Führe die folgenden Befehle jeweils in eigenen Terminals aus:
 
 ```sh
 # VDR starten

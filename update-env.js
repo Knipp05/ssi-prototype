@@ -1,19 +1,6 @@
 const fs = require("fs");
-const readline = require("readline");
+const choice = process.env.CHOICE || 'ngrok';
 const { exec, execSync } = require("child_process");
-
-// Frage den Benutzer, ob ngrok genutzt werden soll
-function askQuestion(query) {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-
-    return new Promise(resolve => rl.question(query, ans => {
-        rl.close();
-        resolve(ans.toLowerCase());
-    }));
-}
 
 // Startet ngrok, falls es genutzt werden soll
 function startNgrok() {
@@ -45,9 +32,9 @@ function getNgrokTunnels() {
 function extractUrls(useNgrok, tunnels) {
     if (!useNgrok) {
         return {
-            frontend: "http://localhost:3000",
-            backend: "http://localhost:3001",
-            vdr: "http://localhost:3002",
+            frontend: "http://frontend:3000",
+            backend: "http://backend:3001",
+            vdr: "http://vdr:3002",
         };
     }
 
@@ -77,10 +64,8 @@ NEXT_PUBLIC_FRONTEND_URL=${frontendUrl}
 
 // Hauptfunktion
 (async function () {
-    const answer = await askQuestion("ngrok verwenden, um die Wallet über ein anderes Gerät zu nutzen? (y/n): ");
-    const useNgrok = answer === "y";
 
-    if (useNgrok) {
+    if (choice === 'ngrok') {
         startNgrok();
         console.log("Warte 5 Sekunden, bis ngrok gestartet ist...");
         setTimeout(() => {
