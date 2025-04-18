@@ -23,7 +23,7 @@ Dieses Projekt ist ein **SSI (Self-Sovereign Identity) Prototype**, der die grun
 ### 2️⃣ Projekt klonen
 
 ```sh
-git clone https://https://github.com/Knipp05/ssi-prototype.git
+git clone https://github.com/Knipp05/ssi-prototype.git
 cd ssi-prototype
 ```
 
@@ -34,18 +34,21 @@ Kopiere die Beispieldatei und passe die Werte an:
 ```sh
 cd server
 cp .env.example .env
+cd ..
 ```
 
 Falls **kein ngrok** genutzt wird, werden **localhost-Adressen** verwendet.
 
 ### 4️⃣ Starten der Anwendung
+
+Führe in einem Terminal den folgenden Befehl aus und lasse den Prozess im Hintergrund laufen:
 ```sh
 # URL in .env setzen und ggf. ngrok starten
 node update-env.js
 ```
 
 #### Mit Docker
-
+Führe in einem separaten Terminal folgendes aus:
 ```sh
 docker compose up --build
 ```
