@@ -85,7 +85,7 @@ export async function verifyPresentation (req: Request, res: Response) {
     }
 
     const schemaId = credential.credentialSchema.id;
-    const schemaResponse = await fetch(`${VDR_URL}${schemaId}`, { // SchemaId hat bereits Präfix /schema
+    const schemaResponse = await fetch(`${VDR_URL}${schemaId}`, {
         headers: { "ngrok-skip-browser-warning": "true" },
     });
 
@@ -216,7 +216,6 @@ export function validateSchema(data: object, schema: any): boolean {
     console.log("Eingehende Daten:", data);
     console.log("Erwartetes Schema:", schema);
 
-    // Prüfen, ob die Feldnamen und Typen korrekt sind
     for (const key of Object.keys(schema)) {
         console.log(`Prüfe, ob ${key} in den Daten vorhanden ist`);
 
@@ -229,7 +228,6 @@ export function validateSchema(data: object, schema: any): boolean {
         const actualValue = (data as Record<string, any>)[key];
         const actualType = typeof actualValue;
 
-        // 🔹 Sonderfall: "integer" vs. "number"
         if (expectedType === "integer") {
             if (!Number.isInteger(actualValue)) {
                 console.error(`Feld ${key} sollte ein Integer sein, aber ist: ${actualValue} (Typ: ${actualType})`);

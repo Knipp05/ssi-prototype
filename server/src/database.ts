@@ -7,7 +7,6 @@ import { students, studentsLogin } from "./demo_data.js";
 
 const SALT_ROUNDS = 10;
 
-// Funktion zum Öffnen der Datenbank
 export async function openDB(): Promise<Database> {
     return open({
         filename: path.join(process.cwd(), "database.sqlite"),
@@ -15,7 +14,6 @@ export async function openDB(): Promise<Database> {
     });
 }
 
-// Funktion zur Initialisierung der Tabellen
 export async function initDB(): Promise<void> {
     const db = await openDB();
 

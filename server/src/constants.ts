@@ -3,18 +3,15 @@ import path from "path";
 import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 
-// ✅ `__dirname` für ES-Module definieren
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ `.env`-Pfad absolut bestimmen
 const envPath = path.resolve(__dirname, "../../../.env");
 console.log("🌍 Lade .env von:", envPath);
 
 dotenv.config({ path: envPath });
 dotenv.config();
 
-// ✅ Variablen exportieren
 export const PORT = 3001;
 export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://frontend:3000";
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://backend:3001";

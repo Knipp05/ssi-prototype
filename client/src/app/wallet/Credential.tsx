@@ -34,7 +34,6 @@ export default function Credential(props: CredentialProps) {
       key={props.credential?.id}
       className="border p-4 rounded-lg shadow-md bg-gray-50 text-black overflow-hidden break-words"
     >
-      {/* Erste Zeile mit ID und Löschen-Button */}
       <div className="flex items-center justify-between">
         <p className="whitespace-normal">
           <strong>ID:</strong> {props.credential?.id}

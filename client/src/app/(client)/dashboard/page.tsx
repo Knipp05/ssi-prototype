@@ -185,6 +185,7 @@ export default function Dashboard() {
                 )}
               </div>
 
+              {/* PDF Download Button */}
               <button
                 onClick={(e) => e.stopPropagation()}
                 className="mt-4 px-4 py-2 bg-gray-200 text-black font-semibold rounded-lg shadow hover:bg-gray-300 transition"

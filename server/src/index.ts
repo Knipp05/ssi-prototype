@@ -19,7 +19,7 @@ export const pendingOffers = new Map<string, CredentialOffer>();
 export const pendingRequests = new Map<string, PresentationRequest>();
 export const activeUsers = new Map<string, number>();
 
-export const supportedSchemas = await initSupportedSchemas(); // Key: type, value: SchemaID
+export const supportedSchemas = await initSupportedSchemas();
 
 app.use(cors({
     origin: FRONTEND_URL,
@@ -28,7 +28,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Initialisiere die Datenbank
 (async () => {
     await initDB();
 
@@ -113,8 +112,7 @@ app.use(express.json());
                     pendingOffers.delete(offerId);
                 });
     
-                // Informiere **nur** das Dashboard über die Offer-Löschung
-                const dashboardSocket = activeSessions.get(closedClientSession || closedWalletSession!); // hier noch sichern!
+                const dashboardSocket = activeSessions.get(closedClientSession || closedWalletSession!);
                 if (dashboardSocket) {
                     removedOffers.forEach(offerId => {
                         dashboardSocket.send(JSON.stringify({ type: "offer_deleted", offerId }));

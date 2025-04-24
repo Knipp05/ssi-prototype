@@ -1,8 +1,7 @@
 const fs = require("fs");
-const choice = process.env.CHOICE || 'ngrok';
 const { exec, execSync } = require("child_process");
+const readline = require("readline");
 
-// Startet ngrok, falls es genutzt werden soll
 function startNgrok() {
     try {
         execSync("ngrok --version", { stdio: "ignore" });
@@ -10,14 +9,12 @@ function startNgrok() {
         console.error("\x1b[31mFehler: ngrok ist nicht installiert!\x1b[0m");
         console.log("\x1b[33mLade es hier herunter:\x1b[0m https://ngrok.com/download");
         console.log("\x1b[32mOder installiere es mit:\x1b[0m npm i -g ngrok");
-        
         process.exit(1);
     }
     console.log("Starte ngrok...");
     exec("ngrok start --all --config ./ngrok.yml", { stdio: "ignore", detached: true });
 }
 
-// Holt die aktiven ngrok-Tunnel
 function getNgrokTunnels() {
     try {
         const result = execSync("curl -s http://127.0.0.1:4040/api/tunnels", { encoding: "utf8" });
@@ -28,7 +25,6 @@ function getNgrokTunnels() {
     }
 }
 
-// Extrahiert die ngrok-URLs oder fällt auf `localhost` zurück
 function extractUrls(useNgrok, tunnels) {
     if (!useNgrok) {
         return {
@@ -44,28 +40,40 @@ function extractUrls(useNgrok, tunnels) {
 
     if (!frontend || !backend || !vdr) {
         console.error("Konnte nicht alle ngrok-URLs extrahieren. Nutze `localhost`-Fallback.");
-        return extractUrls(false, []); // Falls ngrok fehlschlägt, fallback auf localhost
+        return extractUrls(false, []);
     }
 
     return { frontend, backend, vdr };
 }
 
-// Aktualisiert die `.env`-Datei
 function updateEnvFile(frontendUrl, backendUrl, vdrUrl) {
     const envContent = `NEXT_PUBLIC_BACKEND_URL=${backendUrl}
 NEXT_PUBLIC_VDR_URL=${vdrUrl}
 NEXT_PUBLIC_FRONTEND_URL=${frontendUrl}
-    `;
+`;
 
     fs.writeFileSync(".env", envContent);
-    console.log(`Frontend ist erreichbar unter: \x1b[36m${frontendUrl}\x1b[0m`);
-
+    console.log(`\nFrontend ist erreichbar unter: \x1b[36m${frontendUrl}\x1b[0m\n`);
 }
 
-// Hauptfunktion
-(async function () {
+function askChoice() {
+    return new Promise((resolve) => {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
 
-    if (choice === 'ngrok') {
+        rl.question("ngrok verwenden, um die Wallet auf externen Geräten (z. B. Smartphone nutzen zu können? (y/n): ", (answer) => {
+            rl.close();
+            resolve(answer.trim().toLowerCase() === "y" ? "y" : "n");
+        });
+    });
+}
+
+(async function () {
+    const choice = await askChoice();
+
+    if (choice === 'y') {
         startNgrok();
         console.log("Warte 5 Sekunden, bis ngrok gestartet ist...");
         setTimeout(() => {
@@ -74,7 +82,7 @@ NEXT_PUBLIC_FRONTEND_URL=${frontendUrl}
             updateEnvFile(frontend, backend, vdr);
         }, 5000);
     } else {
-        console.log("Verwende `localhost` für alle Dienste.");
+        console.log("Verwende lokale Adressen für alle Dienste in Docker.");
         const { frontend, backend, vdr } = extractUrls(false, []);
         updateEnvFile(frontend, backend, vdr);
     }

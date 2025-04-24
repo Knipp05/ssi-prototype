@@ -11,7 +11,6 @@ import { CredentialOffer } from "./types.js";
 import { openDB } from "./database.js";
 import { validateSchema } from "./verifier.js";
 
-// Web Crypto API für jose setzen
 if (!globalThis.crypto) {
     globalThis.crypto = crypto.webcrypto as Crypto;
 }
@@ -20,7 +19,6 @@ export async function initIssuer(): Promise<void> {
     console.log("Initialisiere Issuer...");
     console.log("Issuer UUID:", ISSUER_UUID);
 
-    // Prüfen, ob Issuer bereits registriert ist
     const isRegistered = await checkIfIssuerRegistered();
     if (isRegistered) {
         console.log("Issuer ist bereits im VDR registriert.");
@@ -62,7 +60,7 @@ export async function offerCredential(req: Request, res: Response) {
         return;
     }
 
-   let offerId = [...pendingOffers.entries()] // entfernen, wenn nicht mehrmals aufgerufen!
+   let offerId = [...pendingOffers.entries()]
         .find(([_, offer]) => offer.sessionId === sessionId)?.[0];
     
     if (!offerId) {
@@ -184,25 +182,21 @@ async function registerIssuer(publicKeyJWK: object): Promise<void> {
 async function loadOrGenerateKeys(): Promise<void> {
     let publicJWK;
 
-    // **1️⃣ Issuer immer registrieren, egal ob Schlüssel existieren oder nicht**
     if (fs.existsSync(PUBLIC_KEY_PATH)) {
         publicJWK = JSON.parse(fs.readFileSync(PUBLIC_KEY_PATH, "utf8"));
     } else {
         console.log("Es existiert noch kein Public Key. Generiere neuen Schlüssel...");
         const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
 
-        // **Speichere den privaten Schlüssel**
         const privateJWK = await exportJWK(privateKey);
         fs.writeFileSync(PRIVATE_KEY_PATH, JSON.stringify(privateJWK, null, 2));
 
-        // **Speichere den öffentlichen Schlüssel**
         publicJWK = await exportJWK(publicKey);
         fs.writeFileSync(PUBLIC_KEY_PATH, JSON.stringify(publicJWK, null, 2));
 
         console.log("Neues Schlüsselpaar gespeichert.");
     }
 
-    // **2️⃣ Issuer beim VDR registrieren**
     await registerIssuer(publicJWK);
 }
 
@@ -210,7 +204,6 @@ async function loadOrGenerateKeys(): Promise<void> {
 async function createSchema(schemaDefinition: object): Promise<string> {
     const schemaHash = generateSchemaHash(schemaDefinition)
 
-    // Prüfe, ob das Schema bereits existiert
     const existingSchemaId = await checkIfSchemaExists(schemaHash);
     if (existingSchemaId) {
         console.log("Schema ist bereits im VDR registriert. ID: ", existingSchemaId);
@@ -225,7 +218,6 @@ async function createSchema(schemaDefinition: object): Promise<string> {
         definition: schemaDefinition
     };
 
-    // Falls nicht registriert → Schema speichern
     await registerSchema(schema);
     return schemaId
 }
@@ -234,7 +226,6 @@ function generateSchemaHash(schema: object): string {
     return crypto.createHash("sha256").update(JSON.stringify(schema)).digest("hex");
 }
 
-// **2️⃣ Prüft, ob das Schema bereits existiert**
 async function checkIfSchemaExists(schemaHash: string): Promise<string | null> {
     try {
         const response = await fetch(`${VDR_URL}/schema/id-by-hash`, {
@@ -257,7 +248,6 @@ async function checkIfSchemaExists(schemaHash: string): Promise<string | null> {
     }
 }
 
-// **3️⃣ Speichert das Schema im Dummy VDR**
 async function registerSchema(schema: object) {
     try {
         const response = await fetch(`${VDR_URL}/register-schema`, {
@@ -269,7 +259,6 @@ async function registerSchema(schema: object) {
             body: JSON.stringify(schema),
         });
 
-        // 🔹 JSON-Antwort nur EINMAL auslesen
         const data = await response.json();
         console.log("Antwort: ", data);
 
@@ -317,7 +306,6 @@ async function issueCredential(walletDid: string, schemaType: string, registrati
             return { message: "Schema nicht gefunden!"};
         }
 
-        // Prüfen, ob das Schema existiert
         const schemaResponse = await fetch(`${VDR_URL}/schema/${schemaId}`, {
             method: "GET",
             headers: {
@@ -379,7 +367,6 @@ async function issueCredential(walletDid: string, schemaType: string, registrati
             return { error: "Daten entsprechen nicht dem Schema"};
         }
 
-        // Credential-Objekt erstellen
         const credential = {
             id: uuidv4(),
             type: [ "VerifiableCredential", schemaType],
@@ -441,10 +428,8 @@ async function getStudentDataForSchema(registrationNumber: number, schemaType: s
     const schema = supportedCredentials[schemaType];
     console.log("Schemadaten:", schema);
 
-    // Liste der berechneten Felder
     const computedFields = schemaType === "EnrollmentCredential" ? new Set(["id", "issuance_date", "expiry_date", "university_semester"]) : new Set(["id", "total_semesters", "exmatriculation_date", "issuance_date"]);
 
-    // Extrahiere nur die Felder, die in der DB gespeichert sind
     const dbFields = Object.keys(schema).filter(field => !computedFields.has(field));
     console.log("Felder aus DB:", dbFields);
 
@@ -452,10 +437,8 @@ async function getStudentDataForSchema(registrationNumber: number, schemaType: s
         return null;
     }
 
-    // Dynamische SQL-Abfrage
     const query = `SELECT ${dbFields.join(", ")} FROM students WHERE registration_number = ?`;
 
-    // Datenbank-Abfrage
     console.log("🚀 Starte Datenbankabfrage...");
     const studentData = await db.get(query, [registrationNumber]);
     console.log("✅ Student gefunden:", studentData);
@@ -474,22 +457,19 @@ function getSemesterValidityDates() {
     let issuanceDate, expiryDate;
   
     if (today.getMonth() >= 9) {
-        // Zeitraum: 1. Oktober – 31. Dezember
-        issuanceDate = new Date(year, 9, 1);  // 1. Oktober
-        expiryDate = new Date(year + 1, 2, 31); // 31. März des nächsten Jahres
+        issuanceDate = new Date(year, 9, 1);
+        expiryDate = new Date(year + 1, 2, 31);
     } else if (today.getMonth() < 3) {
-        // Zeitraum: 1. Januar - 31. März
         issuanceDate = new Date(year - 1, 9, 1);
         expiryDate = new Date(year, 2, 31)
     } else {
-        // Zeitraum: 1. April – 30. September
-        issuanceDate = new Date(year, 3, 1);  // 1. April
-        expiryDate = new Date(year, 8, 30);   // 30. September
+        issuanceDate = new Date(year, 3, 1);
+        expiryDate = new Date(year, 8, 30);
     }
   
     return {
-      issuanceDate: issuanceDate, // YYYY-MM-DD
-      expiryDate: expiryDate // YYYY-MM-DD
+      issuanceDate: issuanceDate,
+      expiryDate: expiryDate
     };
 }
 

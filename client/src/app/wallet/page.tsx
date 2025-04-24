@@ -38,7 +38,6 @@ function Wallet() {
   const [credentials, setCredentials] = useState<VC<Record<string, any>>[]>([]);
   const [isCryptoSupported, setIsCryptoSupported] = useState(true);
 
-  // **Prüft, ob ein Identifier existiert oder erzeugt einen neuen**
   useEffect(() => {
     async function checkOrCreateIdentifier() {
       if (!window.crypto?.subtle) {
@@ -75,7 +74,7 @@ function Wallet() {
   useEffect(() => {
     if (!sessionId) return;
 
-    const wsInstance = new WebSocket(BACKEND_URL.replace(/^http/, "ws")); // ggf. dynamischer gestalten
+    const wsInstance = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
 
     wsInstance.onopen = () => {
       console.log("Wallet WebSocket verbunden!");
@@ -410,7 +409,6 @@ function Wallet() {
         </div>
       )}
 
-      {/* 📢 Credential Offer Benachrichtigung */}
       {credentialOffers?.map((offer) => (
         <div
           key={offer.offerId}
@@ -439,7 +437,6 @@ function Wallet() {
           </div>
         </div>
       ))}
-      {/* 📢 Credential Offer Benachrichtigung */}
       {presentationRequests?.map((presentation) => (
         <div
           key={presentation.requestId}
@@ -527,7 +524,6 @@ function Wallet() {
               }`}
             >
               <Credential credential={cred} setCredentials={setCredentials} />{" "}
-              {/* Hier unbeding dynamische Darstellung der Credential Daten machen!!!! */}
             </div>
           ))
         )
