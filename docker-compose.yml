@@ -1,10 +1,10 @@
 services:
   frontend:
     build:
-      dockerfile: ./client/Dockerfile
       context: .
-    ports:
-      - "3000:3000"
+      dockerfile: ./client/Dockerfile
+    expose:
+      - "3000"
     env_file:
       - .env
     volumes:
@@ -12,10 +12,10 @@ services:
 
   backend:
     build:
-      dockerfile: Dockerfile
       context: ./server
-    ports:
-      - "3001:3001"
+      dockerfile: Dockerfile
+    expose:
+      - "3001"
     env_file:
       - .env
     volumes:
@@ -23,16 +23,33 @@ services:
 
   vdr:
     build:
-      dockerfile: Dockerfile
       context: ./vdr
-    ports:
-      - "3002:3002"
+      dockerfile: Dockerfile
+    expose:
+      - "3002"
     env_file:
       - .env
     volumes:
       - vdr_data:/app/data
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+      - vdr
+
 volumes:
   frontend_data:
   backend_data:
   vdr_data:
+  caddy_data:
+  caddy_config:

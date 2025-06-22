@@ -1,0 +1,5 @@
+ssi-example.ddns.net {
+  reverse_proxy /api/* backend:3001
+  reverse_proxy /vdr/* vdr:3002
+  reverse_proxy / frontend:3000
+}
