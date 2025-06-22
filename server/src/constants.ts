@@ -13,9 +13,9 @@ dotenv.config({ path: envPath });
 dotenv.config();
 
 export const PORT = 3001;
-export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://frontend:3000";
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://backend:3001";
-export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "http://vdr:3002";
+export const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://ssi-example.ddns.net/";
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://ssi-example.ddns.net/api";
+export const VDR_URL = process.env.NEXT_PUBLIC_VDR_URL || "https://ssi-example.ddns.net/vdr";
 
 export const DATABASE_PATH = process.env.DATABASE_PATH || "./database.sqlite";
 export const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH || "./private.pem";
